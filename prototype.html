@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EDUDOCENT - Plataforma Docente Integral</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --accent: #06b6d4;
+            --success: #10b981;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --radius: 20px;
+            --shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Reset & Base Styles */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); padding: 2rem 1.5rem; line-height: 1.6; }
+        .container { max-width: 1300px; margin: 0 auto; }
+
+        /* Header */
+        .app-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: white; 
+            padding: 1.25rem 2rem; 
+            border-radius: var(--radius); 
+            box-shadow: var(--shadow); 
+            margin-bottom: 2rem; 
+        }
+        .app-logo { 
+            font-size: 1.5rem; 
+            font-weight: 800; 
+            color: var(--primary); 
+            display: flex; 
+            align-items: center; 
+            gap: 0.5rem; 
+            cursor: pointer;
+            user-select: none;
+        }
+        .plan-badge-btn { 
+            background: #eef2ff; 
+            color: var(--primary); 
+            border: 1px solid #c7d2fe; 
+            padding: 0.6rem 1.25rem; 
+            border-radius: 50px; 
+            font-weight: 700; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            gap: 0.6rem; 
+            transition: all 0.2s ease; 
+        }
+        .plan-badge-btn:hover { 
+            background: #e0e7ff; 
+            transform: scale(1.03);
+        }
+        .badge-count { 
+            background: var(--primary); 
+            color: white; 
+            width: 24px; 
+            height: 24px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 0.85rem; 
+            font-weight: 800;
+        }
+
+        /* Banner Inclusivo */
+        .featured-banner { 
+            background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); 
+            border-radius: var(--radius); 
+            color: white; 
+            padding: 2.5rem; 
+            margin-bottom: 2.5rem; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            gap: 2rem;
+            box-shadow: 0 20px 30px -5px rgba(79, 70, 229, 0.25); 
+        }
+        .banner-content h2 { font-size: 1.9rem; font-weight: 800; margin-bottom: 0.5rem; }
+        .banner-content p { opacity: 0.95; max-width: 750px; font-size: 1rem; font-weight: 500; }
+        .btn-banner { 
+            background: white; 
+            color: var(--primary); 
+            border: none; 
+            padding: 0.9rem 1.8rem; 
+            font-weight: 700; 
+            border-radius: 14px; 
+            cursor: pointer; 
+            transition: all 0.2s ease; 
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            white-space: nowrap;
+        }
+        .btn-banner:hover { 
+            transform: scale(1.05); 
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Banco de Asignaturas (20 materias) */
+        .subjects-section { 
+            background: white; 
+            border-radius: var(--radius); 
+            padding: 2.5rem; 
+            box-shadow: var(--shadow); 
+            margin-bottom: 2.5rem; 
+        }
+        .section-title { font-size: 1.7rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--text-main); }
+        .section-desc { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; font-weight: 500; }
+        
+        .subjects-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); 
+            gap: 1.25rem; 
+        }
+        .subject-card { 
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); 
+            border: 2px solid var(--border); 
+            border-radius: var(--radius); 
+            padding: 1.5rem 1.25rem; 
+            text-align: center; 
+            cursor: pointer; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+        .subject-card:hover { 
+            transform: translateY(-5px); 
+            border-color: var(--primary); 
+            background: white;
+            box-shadow: 0 10px 20px rgba(79, 70, 229, 0.08); 
+        }
+        .subject-icon { font-size: 2.2rem; margin-bottom: 0.5rem; }
+        .subject-name { font-size: 1.05rem; font-weight: 800; margin-bottom: 0.25rem; color: var(--text-main); }
+        .subject-tag { font-size: 0.8rem; color: var(--primary); font-weight: 700; }
+
+        /* Centro de Apoyo Inclusivo */
+        .support-center { 
+            background: white; 
+            border-radius: var(--radius); 
+            padding: 2.5rem; 
+            box-shadow: var(--shadow); 
+        }
+
+        /* Barra de búsqueda y filtros del centro de apoyo */
+        .support-header {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .search-wrapper {
+            display: flex;
+            gap: 0.75rem;
+        }
+        .search-input {
+            flex: 1;
+            padding: 0.85rem 1.25rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            font-size: 0.95rem;
+            outline: none;
+            background-color: var(--bg-color);
+            font-weight: 500;
+            transition: 0.2s;
+        }
+        .search-input:focus {
+            border-color: var(--primary);
+            background-color: white;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        .btn-search {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.85rem 1.75rem;
+            border-radius: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-search:hover {
+            background-color: var(--primary-hover);
+        }
+        .filter-pills {
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+            scrollbar-width: thin;
+        }
+        .filter-pill {
+            padding: 0.5rem 1.1rem;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .filter-pill:hover {
+            background-color: #e2e8f0;
+            color: var(--text-main);
+        }
+        .filter-pill.active {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            color: white;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+        }
+
+        .cards-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); 
+            gap: 1.5rem; 
+        }
+        .resource-card { 
+            border: 1px solid var(--border); 
+            border-radius: var(--radius); 
+            padding: 1.5rem; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between; 
+            background: white;
+            transition: all 0.3s ease; 
+        }
+        .resource-card:hover { 
+            box-shadow: 0 12px 24px rgba(0,0,0,0.06); 
+            border-color: #cbd5e1; 
+            transform: scale(1.01);
+        }
+        .card-header-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .card-icon-wrap {
+            font-size: 2rem;
+            background-color: var(--bg-color);
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .card-badge { 
+            background: #e0f2fe; 
+            color: #0369a1; 
+            font-size: 0.75rem; 
+            font-weight: 700; 
+            padding: 0.25rem 0.75rem; 
+            border-radius: 50px; 
+            align-self: flex-start;
+        }
+        .card-title { font-size: 1.15rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--text-main); }
+        .card-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem; font-weight: 500; }
+        .card-actions { display: flex; gap: 0.75rem; }
+        .btn-detail { 
+            flex: 1; 
+            background: #f8fafc; 
+            border: 1px solid var(--border); 
+            padding: 0.75rem; 
+            border-radius: 10px; 
+            font-weight: 700; 
+            cursor: pointer; 
+            transition: 0.2s;
+        }
+        .btn-detail:hover {
+            background-color: #e2e8f0;
+        }
+        .btn-add { 
+            flex: 1;
+            background: var(--primary); 
+            border: none; 
+            color: white; 
+            padding: 0.75rem 1rem; 
+            border-radius: 10px; 
+            font-weight: 700; 
+            cursor: pointer; 
+            transition: all 0.2s ease; 
+        }
+        .btn-add:hover { 
+            background: var(--primary-hover); 
+        }
+        .btn-add.added { 
+            background: var(--success); 
+        }
+
+        /* Modales y Toast */
+        .modal-overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(15, 23, 42, 0.6); 
+            backdrop-filter: blur(4px); 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            opacity: 0; 
+            pointer-events: none; 
+            transition: opacity 0.3s ease; 
+            z-index: 1000; 
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-container { 
+            background: white; 
+            width: 90%; 
+            max-width: 600px; 
+            border-radius: var(--radius); 
+            padding: 2.25rem; 
+            box-shadow: 0 25px 50px rgba(0,0,0,0.2); 
+            transform: translateY(30px); 
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); 
+        }
+        .modal-overlay.active .modal-container { transform: translateY(0); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .modal-header h3 { font-size: 1.4rem; font-weight: 800; color: var(--text-main); }
+        .close-modal { background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-muted); font-weight: 300; transition: 0.2s; }
+        .close-modal:hover { color: var(--text-main); }
+
+        .toast { 
+            position: fixed; 
+            bottom: 30px; 
+            right: 30px; 
+            background: #0f172a; 
+            color: white; 
+            padding: 1rem 1.5rem; 
+            border-radius: 14px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25); 
+            display: flex; 
+            align-items: center; 
+            gap: 0.75rem; 
+            transform: translateY(120px); 
+            opacity: 0; 
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); 
+            z-index: 2000; 
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast-icon { font-size: 1.2rem; }
+        .toast-text { font-size: 0.9rem; font-weight: 700; }
+
+        /* Responsive Design */
+        @media(max-width: 768px) {
+            body { padding: 1rem 0.5rem; }
+            .featured-banner { flex-direction: column; text-align: center; padding: 2rem; }
+            .btn-banner { width: 100%; }
+            .app-header { padding: 1rem; }
+            .search-wrapper { flex-direction: column; }
+            .btn-search { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="app-logo" onclick="window.scrollTo({top:0, behavior:'smooth'})">🎓 EDUDOCENT</div>
+            <button class="plan-badge-btn" onclick="openPlanModal()">
+                📋 Mi Plan de Clase
+                <span class="badge-count" id="planCount">0</span>
+            </button>
+        </header>
+
+        <!-- Banner Inclusivo -->
+        <div class="featured-banner">
+            <div class="banner-content">
+                <h2>🤝 Educación Inclusiva y Apoyo Intelectual</h2>
+                <p>Estrategias adaptadas, metodologías multisensoriales y guías didácticas de apoyo diseñadas para atender con calidad y equidad a alumnos con discapacidad intelectual.</p>
+            </div>
+            <button class="btn-banner" onclick="scrollToCenter()">Explorar Recursos</button>
+        </div>
+
+        <!-- Banco de Asignaturas (20 Materias) -->
+        <section class="subjects-section">
+            <h2 class="section-title">📚 Banco de Asignaturas y Recursos Didácticos</h2>
+            <p class="section-desc">Haz clic sobre cualquiera de las 20 materias curriculares para explorar juegos interactivos y dinámicas lúdicas específicas para tu aula.</p>
+            
+            <div class="subjects-grid" id="subjectsGrid">
+                <!-- Se inyectarán dinámicamente -->
+            </div>
+        </section>
+
+        <!-- Centro de Apoyo Inclusivo (Estrategias) -->
+        <section class="support-center" id="supportCenter">
+            <h2 class="section-title">Centro de Apoyo a la Discapacidad Intelectual</h2>
+            <p class="section-desc">Estrategias prácticas de adaptación curricular y apoyo metodológico integradas con tu planificador.</p>
+
+            <div class="support-header">
+                <div class="search-wrapper">
+                    <input 
+                        type="text" 
+                        class="search-input" 
+                        id="inclusiveSearch" 
+                        placeholder="Buscar estrategias, adaptaciones o recursos visuales..."
+                        oninput="filterInclusiveResources()"
+                    >
+                    <button class="btn-search" onclick="filterInclusiveResources()">Buscar</button>
+                </div>
+                <div class="filter-pills" id="filterPills">
+                    <!-- Se inyectarán dinámicamente -->
+                </div>
+            </div>
+
+            <div class="cards-grid" id="inclusiveCardsGrid">
+                <!-- Se inyectarán dinámicamente -->
+            </div>
+        </section>
+    </div>
+
+    <!-- Modal Dinámico -->
+    <div class="modal-overlay" id="appModal" onclick="closeModalOutside(event)">
+        <div class="modal-container" id="modalContainerContent"></div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toastNotification">
+        <span class="toast-icon" id="toastIcon">✨</span>
+        <span class="toast-text" id="toastText">¡Acción realizada!</span>
+    </div>
+
+    <script>
+        // Listado de exactamente 20 asignaturas curriculares
+        const subjectsList = [
+            { name: "Español", icon: "📖", desc: "Actividades de comprensión verbal, lectura compartida asistida por imágenes y dinámicas de construcción de oraciones simples." },
+            { name: "Inglés", icon: "🇬🇧", desc: "Juegos interactivos de asociación de vocabulario bilingüe elemental (colores, animales, rutinas cotidianas)." },
+            { name: "Sociales", icon: "🗺️", desc: "Dinámicas de reconocimiento espacial y roles sociales de la comunidad escolar y familiar a través de imágenes." },
+            { name: "Naturales", icon: "🌱", desc: "Exploración de la naturaleza y clasificación sensorial de los seres vivos (plantas, animales y cuidado ambiental)." },
+            { name: "Matemáticas", icon: "🔢", desc: "Juegos lúdicos de conteo físico, series de números básicos y ordenamiento secuencial de objetos geométricos." },
+            { name: "Tecnología", icon: "💻", desc: "Retos sencillos de secuencia lógica computacional y exploración interactiva de herramientas digitales y periféricos." },
+            { name: "Historia", icon: "🏛️", desc: "Narración de hechos históricos significativos estructurados mediante líneas de tiempo interactivas y relatos ilustrados." },
+            { name: "Estadística", icon: "📊", desc: "Dinámicas de recolección de datos básicos y diseño guiado de pictogramas y gráficos de barras sencillos." },
+            { name: "Biblia", icon: "⛪", desc: "Parábolas narradas con dramatización, comprensión reflexiva de relatos bíblicos y dinámicas grupales de valores." },
+            { name: "Ética", icon: "🤝", desc: "Juegos de roles para fomentar la empatía, el trabajo en equipo, la resolución de conflictos sencillos y las normas de cortesía." },
+            { name: "Lectura Crítica", icon: "🧐", desc: "Análisis guiado de fábulas breves, formulación de preguntas sencillas sobre imágenes y reconocimiento de intenciones textuales básicas." },
+            { name: "Plan Lector", icon: "📚", desc: "Lectura de cuentos cortos estructurados mediante el método DUA y apoyados en imágenes explicativas y pictogramas." },
+            { name: "Educación Física", icon: "⚽", desc: "Circuitos motrices de equilibrio, actividades coordinativas divertidas y dinámicas de juego adaptadas y de estimulación." },
+            { name: "Física", icon: "⚡", desc: "Retos prácticos con experimentos interactivos sencillos de fricción, gravedad y efectos visibles de las fuerzas mecánicas." },
+            { name: "Química", icon: "🧪", desc: "Observación interactiva de cambios de fase en sustancias cotidianas (agua, hielo, vapor) y experimentos de mezclas seguras." },
+            { name: "Artes", icon: "🎨", desc: "Talleres prácticos de modelado con plastilina, técnicas de collage con texturas variadas y pintura de libre expresión." },
+            { name: "Filosofía", icon: "💡", desc: "Debates guiados sobre dilemas morales sencillos, preguntas del por qué de las cosas cotidianas y dinámicas de lógica básica." },
+            { name: "Música", icon: "🎵", desc: "Juegos de reproducción rítmica, percusión corporal coordinada y reconocimiento auditivo de diversos instrumentos musicales." },
+            { name: "Emprendimiento", icon: "💼", desc: "Dinámicas cooperativas para simular una feria escolar de productos hechos a mano y manejo de presupuestos de fantasía." },
+            { name: "Geografía", icon: "🏔️", desc: "Maquetas tridimensionales del relieve, rompecabezas de mapas de regiones y dinámicas del clima a través de texturas." }
+        ];
+
+        // Listado de recursos y estrategias inclusivas
+        const inclusiveResources = [
+            {
+                id: "1",
+                category: "Adaptaciones Curriculares",
+                title: "Instrucciones Fragmentadas",
+                desc: "Consiste en dividir tareas complejas en pasos individuales y breves para reducir la sobrecarga mental en alumnos con discapacidad intelectual.",
+                steps: [
+                    "Identifica la meta principal de la actividad.",
+                    "Subdivide la tarea en un máximo de 3 pasos sencillos.",
+                    "Entrega el paso 1 y verifica su cumplimiento antes de proporcionar el paso 2.",
+                    "Ofrece retroalimentación positiva inmediata en cada logro."
+                ],
+                icon: "🧩"
+            },
+            {
+                id: "2",
+                category: "Materiales Visuales",
+                title: "Agendas y Rutinas Visuales",
+                desc: "Uso de agendas de clase con pictogramas organizados cronológicamente para anticipar los cambios de actividad y reducir la ansiedad.",
+                steps: [
+                    "Diseña una tira visual en la pared o escritorio del estudiante.",
+                    "Usa pictogramas claros que representen el inicio de la clase, el receso y el cierre.",
+                    "Al finalizar una actividad, retira el pictograma correspondiente junto al alumno.",
+                    "Fomenta la autorregulación guiándole a ver 'qué sigue ahora'."
+                ],
+                icon: "📅"
+            },
+            {
+                id: "3",
+                category: "Manejo de Conducta",
+                title: "Refuerzo Positivo con Fichas",
+                desc: "Un sistema visual y tangible que premia el comportamiento adecuado e incentiva la finalización de actividades en el aula.",
+                steps: [
+                    "Define con claridad la conducta a reforzar (ej. permanecer sentado 10 min).",
+                    "Entrega una ficha física (o token adhesivo) inmediatamente al cumplir la conducta.",
+                    "Establece una meta de 3 a 5 fichas para ser canjeadas por un beneficio (ej. tiempo de dibujo).",
+                    "Mantén el sistema visible y fácil de comprender."
+                ],
+                icon: "🪙"
+            },
+            {
+                id: "4",
+                category: "Evaluación Flexible",
+                title: "Evaluación Oral o Pictográfica",
+                desc: "Modificar el formato tradicional escrito por alternativas orales, visuales o de opción múltiple con pictogramas de apoyo.",
+                steps: [
+                    "Simplifica las opciones de examen limitándolas a dos alternativas visualmente distantes.",
+                    "Permite al alumno explicar los conceptos señalando imágenes o mediante expresiones cortas.",
+                    "Elimina límites estrictos de tiempo para la entrega de evaluaciones.",
+                    "Evalúa el proceso constructivo por encima de la caligrafía o redacción."
+                ],
+                icon: "🎨"
+            },
+            {
+                id: "5",
+                category: "Materiales Visuales",
+                title: "Pictogramas de Comunicación PECS",
+                desc: "Fichas portátiles de comunicación no verbal para expresar necesidades básicas, sentimientos y dudas didácticas.",
+                steps: [
+                    "Implementa una libreta con velcro conteniendo pictogramas de uso cotidiano.",
+                    "Modela la entrega de la ficha de 'necesito ayuda' o 'quiero ir al baño'.",
+                    "Vincula la entrega de la ficha a la acción correspondiente para consolidar el significado.",
+                    "Extiende el uso del sistema a los compañeros de grupo para propiciar la integración social."
+                ],
+                icon: "💬"
+            },
+            {
+                id: "6",
+                category: "Manejo de Conducta",
+                title: "Descansos Sensoriales Programados",
+                desc: "Programación de pausas activas breves cada 15 a 20 minutos de concentración para prevenir la fatiga cognitiva escolar.",
+                steps: [
+                    "Establece un temporizador visual visible para el estudiante.",
+                    "Al finalizar el bloque de trabajo, permítele hacer una actividad motriz libre de 3 minutos (ej. estirarse).",
+                    "Guía el retorno a la tarea mediante un aviso de anticipación ('en 1 minuto volvemos a la mesa').",
+                    "Monitorea el nivel de energía del alumno para ajustar los tiempos."
+                ],
+                icon: "⏳"
+            }
+        ];
+
+        // Inicializar filtros
+        const filterCategories = ["Todos", "Adaptaciones Curriculares", "Materiales Visuales", "Manejo de Conducta", "Evaluación Flexible"];
+        let currentFilter = "Todos";
+        let planItems = [];
+
+        // Inyectar materias en la interfaz
+        function loadSubjects() {
+            const grid = document.getElementById('subjectsGrid');
+            grid.innerHTML = '';
+            subjectsList.forEach(sub => {
+                grid.innerHTML += `
+                    <div class="subject-card" onclick="openSubjectGame('${sub.name}', '${sub.icon}', '${sub.desc}')">
+                        <div class="subject-icon">${sub.icon}</div>
+                        <div class="subject-name">${sub.name}</div>
+                        <div class="subject-tag">Ver Dinámicas →</div>
+                    </div>
+                `;
+            });
+        }
+
+        // Inyectar píldoras de filtro
+        function loadFilterPills() {
+            const pillsContainer = document.getElementById('filterPills');
+            pillsContainer.innerHTML = '';
+            filterCategories.forEach(cat => {
+                const isActive = cat === currentFilter ? 'active' : '';
+                pillsContainer.innerHTML += `
+                    <button class="filter-pill ${isActive}" onclick="setFilter('${cat}')">${cat}</button>
+                `;
+            });
+        }
+
+        // Inyectar tarjetas de recursos inclusivos
+        function loadInclusiveCards(list = inclusiveResources) {
+            const container = document.getElementById('inclusiveCardsGrid');
+            container.innerHTML = '';
+            
+            if (list.length === 0) {
+                container.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-muted);">
+                        <p style="font-size: 2rem;">🔍</p>
+                        <p style="font-weight: 700; margin-top: 0.5rem;">No se encontraron recursos que coincidan con la búsqueda.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            list.forEach(res => {
+                const isAdded = planItems.some(item => item.id === res.id);
+                const btnText = isAdded ? '¡Añadido ✓' : 'Añadir al Plan';
+                const btnClass = isAdded ? 'btn-add added' : 'btn-add';
+
+                container.innerHTML += `
+                    <div class="resource-card" id="rec-${res.id}">
+                        <div>
+                            <div class="card-header-info">
+                                <span class="card-icon-wrap">${res.icon}</span>
+                                <span class="card-badge">${res.category}</span>
+                            </div>
+                            <div class="card-title">${res.title}</div>
+                            <p class="card-desc">${res.desc}</p>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn-detail" onclick="openGuide('${res.title}', ${JSON.stringify(res.steps).replace(/"/g, '&quot;')})">Ver Guía</button>
+                            <button class="${btnClass}" id="btn-${res.id}" onclick="toggleAddToPlan('${res.id}')">${btnText}</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // Configurar filtro de categoría
+        function setFilter(cat) {
+            currentFilter = cat;
+            loadFilterPills();
+            filterInclusiveResources();
+        }
+
+        // Búsqueda y filtrado conjunto
+        function filterInclusiveResources() {
+            const query = document.getElementById('inclusiveSearch').value.toLowerCase();
+            const filtered = inclusiveResources.filter(res => {
+                const matchesCategory = currentFilter === "Todos" || res.category === currentFilter;
+                const matchesSearch = res.title.toLowerCase().includes(query) || 
+                                     res.desc.toLowerCase().includes(query) ||
+                                     res.category.toLowerCase().includes(query);
+                return matchesCategory && matchesSearch;
+            });
+            loadInclusiveCards(filtered);
+        }
+
+        function scrollToCenter() {
+            document.getElementById('supportCenter').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Toast de aviso
+        function showToast(text, icon = '✨') {
+            const toast = document.getElementById('toastNotification');
+            document.getElementById('toastText').textContent = text;
+            document.getElementById('toastIcon').textContent = icon;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // Gestionar Plan de Clase
+        function toggleAddToPlan(id) {
+            const res = inclusiveResources.find(item => item.id === id);
+            const index = planItems.findIndex(item => item.id === id);
+            
+            if (index === -1) {
+                planItems.push(res);
+                showToast(`"${res.title}" añadido a tu Plan de Clase`, '📋');
+            } else {
+                planItems.splice(index, 1);
+                showToast(`"${res.title}" removido de tu Plan de Clase`, '🗑️');
+            }
+            
+            // Actualizar badge y recargar tarjetas
+            document.getElementById('planCount').textContent = planItems.length;
+            filterInclusiveResources();
+        }
+
+        // Mostrar guía adaptada (Modal)
+        function openGuide(title, steps) {
+            const container = document.getElementById('modalContainerContent');
+            let stepsHtml = steps.map((s, i) => `
+                <li style="margin-bottom: 0.85rem; display: flex; gap: 0.75rem; align-items: flex-start;">
+                    <span style="background: #eef2ff; color: var(--primary); font-weight: 800; font-size: 0.8rem; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; shrink: 0; margin-top: 0.2rem;">${i+1}</span>
+                    <span style="color: var(--text-main); font-weight: 600; font-size: 0.95rem;">${s}</span>
+                </li>
+            `).join('');
+            
+            container.innerHTML = `
+                <div class="modal-header">
+                    <h3>📋 Guía: ${title}</h3>
+                    <button class="close-modal" onclick="closeModal()">&times;</button>
+                </div>
+                <div style="background-color: #fafafa; border: 1px solid var(--border); padding: 1.5rem; border-radius: 12px; margin-bottom: 1.5rem;">
+                    <p style="color: var(--text-muted); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.75rem;">Pasos recomendados para el aula</p>
+                    <ul style="list-style: none;">${stepsHtml}</ul>
+                </div>
+                <div style="display: flex; justify-content: flex-end;">
+                    <button class="btn-add" onclick="closeModal()">¡Entendido!</button>
+                </div>
+            `;
+            document.getElementById('appModal').classList.add('active');
+        }
+
+        // Abrir ventana dinámica de materia (Modal)
+        function openSubjectGame(subject, icon, desc) {
+            const container = document.getElementById('modalContainerContent');
+            container.innerHTML = `
+                <div class="modal-header">
+                    <h3>${icon} Asignatura: ${subject}</h3>
+                    <button class="close-modal" onclick="closeModal()">&times;</button>
+                </div>
+                <div style="background: #f8fafc; border: 1px solid var(--border); padding: 1.5rem; border-radius: 16px; margin-bottom: 1.5rem;">
+                    <h4 style="color: var(--primary); font-weight: 800; font-size: 1.05rem; margin-bottom: 0.75rem;">🎯 Actividad Lúdica / Recurso Activo</h4>
+                    <p style="margin-bottom: 1.25rem; font-size: 0.95rem; color: var(--text-main); font-weight: 500; line-height: 1.5;">${desc}</p>
+                    <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 1rem; border-radius: 10px; display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: #065f46; font-size: 0.85rem;">
+                        🎮 Recurso interactivo listo para proyector o tablets escolares.
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button class="btn-detail" onclick="closeModal()">Cancelar</button>
+                    <button class="btn-add" onclick="startActivity('${subject}'); closeModal();">Iniciar Actividad</button>
+                </div>
+            `;
+            document.getElementById('appModal').classList.add('active');
+        }
+
+        // Lanzar actividades
+        function startActivity(subject) {
+            showToast(`¡Actividad y juego cargados para la clase de ${subject}!`, '🚀');
+        }
+
+        // Modal de Plan de clase global
+        function openPlanModal() {
+            const container = document.getElementById('modalContainerContent');
+            let itemsHtml = planItems.length === 0 
+                ? '<p style="color: var(--text-muted); text-align: center; padding: 3rem 0; font-weight: 700; font-size: 0.95rem;">Aún no has agregado recursos o adaptaciones a tu plan de clase.</p>'
+                : `<ul style="list-style: none; margin-bottom: 1.5rem;">` + planItems.map(item => `
+                    <li style="display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); background-color: #fafafa; border-radius: 10px; margin-bottom: 0.5rem;">
+                        <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+                            <span>${item.icon}</span> <span>${item.title}</span>
+                        </span>
+                        <button style="background: none; border: none; color: #ef4444; font-weight: 800; cursor: pointer; font-size: 0.85rem;" onclick="removePlanItem('${item.id}')">Quitar</button>
+                    </li>
+                `).join('') + `</ul>`;
+
+            container.innerHTML = `
+                <div class="modal-header">
+                    <h3>📋 Mi Plan de Clase Actual</h3>
+                    <button class="close-modal" onclick="closeModal()">&times;</button>
+                </div>
+                <div style="max-height: 350px; overflow-y: auto; padding-right: 0.5rem; margin-bottom: 1.5rem;">
+                    ${itemsHtml}
+                </div>
+                <div style="display: flex; justify-content: flex-end;">
+                    <button class="btn-add" onclick="closeModal()">Cerrar</button>
+                </div>
+            `;
+            document.getElementById('appModal').classList.add('active');
+        }
+
+        // Quitar ítems desde el modal del plan
+        function removePlanItem(id) {
+            const index = planItems.findIndex(item => item.id === id);
+            if (index !== -1) {
+                const title = planItems[index].title;
+                planItems.splice(index, 1);
+                document.getElementById('planCount').textContent = planItems.length;
+                showToast(`"${title}" removido`, '🗑️');
+                openPlanModal(); // Refrescar modal
+                filterInclusiveResources(); // Refrescar tarjetas
+            }
+        }
+
+        function closeModal() { document.getElementById('appModal').classList.remove('active'); }
+        function closeModalOutside(event) { if (event.target.id === 'appModal') closeModal(); }
+
+        // Carga inicial
+        loadSubjects();
+        loadFilterPills();
+        loadInclusiveCards();
+    </script>
+</body>
+</html>

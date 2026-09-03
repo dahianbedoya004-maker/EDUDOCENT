@@ -1,0 +1,467 @@
+@import "tailwindcss";
+
+/* ✅ MODO OSCURO BASADO EN CLASE .dark (Tailwind v4 requiere esto explícitamente) */
+@variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   SISTEMA ADAPTATIVO DE DISEÑO (LIGHT MODE / DARK MODE & ALTO CONTRASATE)
+   ========================================================================== */
+
+:root {
+  /* Variables Modo Claro (Light Mode) */
+  --bg-app: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-trans: rgba(255, 255, 255, 0.8);
+  --bg-secondary: #f1f5f9;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --border-app: #e2e8f0;
+  --input-bg: #f8fafc;
+  --input-text: #0f172a;
+}
+
+.dark {
+  /* Variables Modo Oscuro (Dark Mode) - Blanco suave #f3f4f6 para legibilidad */
+  --bg-app: #090d16;
+  --bg-card: #1e293b;
+  --bg-card-trans: rgba(30, 41, 59, 0.9);
+  --bg-secondary: #0f172a;
+  --text-main: #f3f4f6;
+  --text-muted: #cbd5e1;
+  --border-app: #334155;
+  --input-bg: #0f172a;
+  --input-text: #f3f4f6;
+}
+
+/* Aplicación global */
+body {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#root {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Scrollbar estética */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.6);
+}
+
+/* ==========================================================================
+   REGLA 1: MODO OSCURO GENERAL (APLICACIÓN INTERNA Y TARJETAS DINÁMICAS)
+   ========================================================================== */
+
+.dark {
+  color-scheme: dark !important;
+  background-color: var(--bg-app) !important;
+  color: var(--text-main) !important;
+}
+
+/* FONDOS ADAPTATIVOS EN MODO OSCURO (SIN HARDCODED) */
+.dark .bg-white,
+.dark .bg-slate-50,
+.dark .bg-slate-100,
+.dark .bg-slate-200,
+.dark .bg-gray-50,
+.dark .bg-gray-100 {
+  background-color: var(--bg-card) !important;
+}
+
+/* Adaptación del fondo lightBg de los temas activos en modo oscuro */
+.dark .bg-\[\#fffbeb\],
+.dark .bg-teal-50,
+.dark .bg-purple-50,
+.dark .bg-rose-50,
+.dark .bg-amber-50,
+.dark .bg-orange-50,
+.dark .bg-sky-50,
+.dark .bg-\[\#F8FAFC\] {
+  background-color: var(--bg-app) !important;
+}
+
+.dark .bg-slate-50\/80,
+.dark .bg-slate-50\/60,
+.dark .bg-slate-50\/50,
+.dark .bg-slate-50\/40,
+.dark .bg-slate-50\/20,
+.dark .bg-white\/90,
+.dark .bg-white\/95,
+.dark .bg-white\/80,
+.dark [class*="bg-slate-50/"] {
+  background-color: var(--bg-card-trans) !important;
+}
+
+/* TEXTOS EN MODO OSCURO: Cuando la app está en modo oscuro, los textos oscuros toman var(--text-main) */
+.dark [class*="text-slate-"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *):not(.text-blue-900):not(.text-indigo-900):not(.text-orange-900):not(.text-green-900):not(.text-rose-900):not(.text-amber-900):not(.text-sky-900):not(.text-yellow-900):not(.text-teal-900):not(.text-emerald-900):not(.text-violet-900):not(.text-lime-900):not(.text-cyan-900):not(.text-fuchsia-900):not(.text-stone-900):not(.text-pink-900),
+.dark [class*="text-gray-"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *):not(.text-blue-900):not(.text-indigo-900):not(.text-orange-900):not(.text-green-900):not(.text-rose-900):not(.text-amber-900):not(.text-sky-900):not(.text-yellow-900):not(.text-teal-900):not(.text-emerald-900):not(.text-violet-900):not(.text-lime-900):not(.text-cyan-900):not(.text-fuchsia-900):not(.text-stone-900):not(.text-pink-900),
+.dark [class*="text-black"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *),
+.dark [class*="text-\[\#0f4c81\]"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *),
+.dark [class*="text-\[\#1d70b8\]"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *),
+.dark [class*="text-\[\#334155\]"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *),
+.dark [class*="text-\[\#0f172a\]"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *),
+.dark [class*="text-\[\#1e293b\]"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *) {
+  color: var(--text-main) !important;
+}
+
+.dark [class*="text-slate-400"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *),
+.dark [class*="text-slate-500"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *),
+.dark [class*="text-gray-400"]:not(.landing-page-container *):not(.onboarding-container *):not(.survey-container *) {
+  color: var(--text-muted) !important;
+}
+
+/* PROTECCIÓN DE COLORES DE ACENTO PARA TEXTO EN MODO OSCURO (Legibilidad Inteligente) */
+.dark .text-blue-900,
+.dark .text-blue-800,
+.dark .text-blue-700 {
+  color: #93c5fd !important;
+}
+
+.dark .text-indigo-900,
+.dark .text-indigo-800,
+.dark .text-indigo-700 {
+  color: #c7d2fe !important;
+}
+
+.dark .text-orange-900,
+.dark .text-orange-800,
+.dark .text-orange-700 {
+  color: #fdba74 !important;
+}
+
+.dark .text-green-900,
+.dark .text-green-800,
+.dark .text-green-700 {
+  color: #86efac !important;
+}
+
+.dark .text-rose-900,
+.dark .text-rose-800,
+.dark .text-rose-700 {
+  color: #fda4af !important;
+}
+
+.dark .text-amber-900,
+.dark .text-amber-800,
+.dark .text-amber-700 {
+  color: #fcd34d !important;
+}
+
+.dark .text-sky-900,
+.dark .text-sky-800,
+.dark .text-sky-700 {
+  color: #7dd3fc !important;
+}
+
+.dark .text-yellow-900,
+.dark .text-yellow-800,
+.dark .text-yellow-700 {
+  color: #fef08a !important;
+}
+
+.dark .text-teal-900,
+.dark .text-teal-800,
+.dark .text-teal-700 {
+  color: #5eead4 !important;
+}
+
+.dark .text-emerald-900,
+.dark .text-emerald-800,
+.dark .text-emerald-700 {
+  color: #6ee7b7 !important;
+}
+
+.dark .text-violet-900,
+.dark .text-violet-800,
+.dark .text-violet-700 {
+  color: #d8b4fe !important;
+}
+
+.dark .text-lime-900,
+.dark .text-lime-800,
+.dark .text-lime-700 {
+  color: #d9f99d !important;
+}
+
+.dark .text-cyan-900,
+.dark .text-cyan-800,
+.dark .text-cyan-700 {
+  color: #67e8f9 !important;
+}
+
+.dark .text-fuchsia-900,
+.dark .text-fuchsia-800,
+.dark .text-fuchsia-700 {
+  color: #f5d0fe !important;
+}
+
+.dark .text-stone-900,
+.dark .text-stone-800,
+.dark .text-stone-700 {
+  color: #e7e5e4 !important;
+}
+
+.dark .text-pink-900,
+.dark .text-pink-850,
+.dark .text-pink-800,
+.dark .text-pink-700 {
+  color: #fbcfe8 !important;
+}
+
+/* PROTECCIÓN DE COLORES DE ACENTO PARA FONDOS EN MODO OSCURO (Traslúcidos y Coloridos - Excluyendo Botones de Temas como bg-teal-500) */
+.dark [class*="bg-blue-50/"]:not(.survey-container *), .dark .bg-blue-50:not(.survey-container *) { background-color: rgba(59, 130, 246, 0.15) !important; border-color: rgba(59, 130, 246, 0.3) !important; }
+.dark [class*="bg-indigo-50/"]:not(.survey-container *), .dark .bg-indigo-50:not(.survey-container *) { background-color: rgba(99, 102, 241, 0.15) !important; border-color: rgba(99, 102, 241, 0.3) !important; }
+.dark [class*="bg-orange-50/"]:not(.survey-container *), .dark .bg-orange-50:not(.survey-container *) { background-color: rgba(249, 115, 22, 0.15) !important; border-color: rgba(249, 115, 22, 0.3) !important; }
+.dark [class*="bg-green-50/"]:not(.survey-container *), .dark .bg-green-50:not(.survey-container *) { background-color: rgba(16, 185, 129, 0.15) !important; border-color: rgba(16, 185, 129, 0.3) !important; }
+.dark [class*="bg-rose-50/"]:not(.survey-container *), .dark .bg-rose-50:not(.survey-container *) { background-color: rgba(244, 63, 94, 0.15) !important; border-color: rgba(244, 63, 94, 0.3) !important; }
+.dark [class*="bg-amber-50/"]:not(.survey-container *), .dark .bg-amber-50:not(.survey-container *) { background-color: rgba(245, 158, 11, 0.15) !important; border-color: rgba(245, 158, 11, 0.3) !important; }
+.dark [class*="bg-sky-50/"]:not(.survey-container *), .dark .bg-sky-50:not(.survey-container *) { background-color: rgba(14, 165, 233, 0.15) !important; border-color: rgba(14, 165, 233, 0.3) !important; }
+.dark [class*="bg-yellow-50/"]:not(.survey-container *), .dark .bg-yellow-50:not(.survey-container *) { background-color: rgba(234, 179, 8, 0.15) !important; border-color: rgba(234, 179, 8, 0.3) !important; }
+.dark [class*="bg-teal-50/"]:not(.survey-container *), .dark .bg-teal-50:not(.survey-container *) { background-color: rgba(20, 184, 166, 0.15) !important; border-color: rgba(20, 184, 166, 0.3) !important; }
+.dark [class*="bg-emerald-50/"]:not(.survey-container *), .dark .bg-emerald-50:not(.survey-container *) { background-color: rgba(16, 185, 129, 0.15) !important; border-color: rgba(16, 185, 129, 0.3) !important; }
+.dark [class*="bg-violet-50/"]:not(.survey-container *), .dark .bg-violet-50:not(.survey-container *) { background-color: rgba(139, 92, 246, 0.15) !important; border-color: rgba(139, 92, 246, 0.3) !important; }
+.dark [class*="bg-lime-50/"]:not(.survey-container *), .dark .bg-lime-50:not(.survey-container *) { background-color: rgba(132, 204, 22, 0.15) !important; border-color: rgba(132, 204, 22, 0.3) !important; }
+.dark [class*="bg-cyan-50/"]:not(.survey-container *), .dark .bg-cyan-50:not(.survey-container *) { background-color: rgba(6, 182, 212, 0.15) !important; border-color: rgba(6, 182, 212, 0.3) !important; }
+.dark [class*="bg-fuchsia-50/"]:not(.survey-container *), .dark .bg-fuchsia-50:not(.survey-container *) { background-color: rgba(217, 70, 239, 0.15) !important; border-color: rgba(217, 70, 239, 0.3) !important; }
+.dark [class*="bg-stone-50/"]:not(.survey-container *), .dark .bg-stone-50:not(.survey-container *) { background-color: rgba(120, 113, 108, 0.15) !important; border-color: rgba(120, 113, 108, 0.3) !important; }
+.dark [class*="bg-pink-50/"]:not(.survey-container *), .dark .bg-pink-50:not(.survey-container *) { background-color: rgba(236, 72, 153, 0.15) !important; border-color: rgba(236, 72, 153, 0.3) !important; }
+
+/* Inputs, Textareas y Selects adaptativos */
+.dark input, 
+.dark textarea,
+.dark select {
+  background-color: var(--input-bg) !important;
+  color: var(--input-text) !important;
+  border-color: var(--border-app) !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Bordes y Sombras en modo oscuro */
+.dark .border-slate-100,
+.dark .border-slate-200\/60,
+.dark .border-slate-200,
+.dark .border-slate-300\/40,
+.dark .border-indigo-100,
+.dark .border-gray-100,
+.dark .border-gray-200 {
+  border-color: var(--border-app) !important;
+}
+
+.dark .shadow-sm,
+.dark .shadow-md,
+.dark .shadow-lg,
+.dark .shadow-xl {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Sidebar en modo oscuro */
+.dark aside {
+  background-color: #0b0f19 !important;
+  border-color: var(--border-app) !important;
+}
+
+.dark aside .bg-slate-50\/80,
+.dark aside .bg-white {
+  background-color: var(--bg-card) !important;
+}
+
+/* ==========================================================================
+   REGLA 2: PÁGINA DE INICIO (LANDING PAGE) Y CONTRASTE EN FONDOS OSCUROS
+   ========================================================================== */
+
+.landing-page-container {
+  color-scheme: dark light !important;
+}
+
+/* Allow text colors inside landing page to be overridden by Tailwind classes */
+.landing-page-container .bg-\[\#334155\],
+.landing-page-container .bg-\[\#334155\] *,
+.dark .landing-page-container .bg-\[\#334155\],
+.dark .landing-page-container .bg-\[\#334155\] * {
+  color: #ffffff !important;
+}
+
+.landing-page-container .bg-\[\#7096D1\],
+.landing-page-container .bg-\[\#7096D1\] *,
+.dark .landing-page-container .bg-\[\#7096D1\],
+.dark .landing-page-container .bg-\[\#7096D1\] * {
+  color: #ffffff !important;
+}
+
+.landing-page-container .text-\[\#7096D1\] {
+  color: #7096D1 !important;
+}
+
+/* ==========================================================================
+   REGLA 3: SLIDER DE LA PÁGINA DE INICIO / ONBOARDING (NEGRO SÓLIDO Y LEGIBLE)
+   ========================================================================== */
+
+.onboarding-container,
+.onboarding-container *,
+.dark .onboarding-container,
+.dark .onboarding-container * {
+  color-scheme: light !important;
+}
+
+.onboarding-container h2 {
+  color: #0f172a !important;
+  font-weight: 900 !important;
+}
+
+.onboarding-container p {
+  color: #1e293b !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+.onboarding-container span {
+  color: #0f172a !important;
+}
+
+/* ==========================================================================
+   EXCEPCIÓN OBLIGATORIA: ENCUESTAS Y CUESTIONARIO (SURVEY)
+   ========================================================================== */
+
+.survey-container,
+.dark .survey-container {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  color-scheme: light !important;
+}
+
+.survey-container p,
+.survey-container h1,
+.survey-container h2,
+.survey-container h3,
+.survey-container h4,
+.survey-container h5,
+.survey-container h6,
+.survey-container label {
+  color: #0f172a !important;
+}
+
+.survey-container .bg-emerald-50\/40 {
+  background-color: rgba(236, 253, 245, 0.7) !important;
+}
+
+.survey-container .text-emerald-900 {
+  color: #064e3b !important;
+}
+
+.survey-container .bg-rose-50\/40 {
+  background-color: rgba(255, 241, 242, 0.7) !important;
+}
+
+.survey-container .text-rose-955,
+.survey-container .text-rose-950 {
+  color: #4c0519 !important;
+}
+
+/* --- MODO OSCURO: AJUSTES DE CONTRASTE Y COLORES EN LA ENCUESTA --- */
+
+/* Forzar que el pie de página y otros contenedores internos con fondo blanco se mantengan blancos en el card */
+.dark .survey-container .bg-white {
+  background-color: #ffffff !important;
+}
+
+/* Estilo para los botones en el card de la encuesta por defecto */
+.dark .survey-container button {
+  color: #0f172a !important;
+}
+
+/* Mantener el botón Siguiente en azul con texto blanco */
+.dark .survey-container button.bg-blue-600,
+.dark .survey-container button.text-white {
+  color: #ffffff !important;
+}
+
+/* El fondo del grid de asignaturas se mantiene gris suave y no cambia a modo oscuro */
+.dark .survey-container .bg-slate-50\/50,
+.dark .survey-container .bg-slate-50 {
+  background-color: rgba(241, 245, 249, 0.5) !important;
+}
+
+/* Tarjetas de Asignatura: Estado Seleccionado */
+.dark .survey-container .grid-subject-cards button[class*="border-emerald-500"] {
+  background-color: #ffffff !important;
+  border-color: #10b981 !important; /* emerald-500 */
+}
+
+.dark .survey-container .grid-subject-cards button[class*="border-emerald-500"] span.text-slate-800 {
+  color: #0f172a !important;
+}
+
+.dark .survey-container .grid-subject-cards button[class*="border-emerald-500"] span.bg-slate-50 {
+  background-color: #f1f5f9 !important;
+}
+
+/* Tarjetas de Asignatura: Estado No Seleccionado (Fondo gris oscuro y texto claro legible) */
+.dark .survey-container .grid-subject-cards button:not([class*="border-emerald-500"]) {
+  background-color: #1e293b !important;
+  border-color: #2d3748 !important;
+}
+
+.dark .survey-container .grid-subject-cards button:not([class*="border-emerald-500"]) span.text-slate-800 {
+  color: #f1f5f9 !important;
+}
+
+.dark .survey-container .grid-subject-cards button:not([class*="border-emerald-500"]) span.bg-slate-50 {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+}
+
+/* Botones del selector de idioma ('ES' y 'EN') en modo oscuro */
+.dark .survey-container .bg-slate-100 {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+.dark .survey-container .bg-slate-100 button {
+  color: #94a3b8 !important;
+}
+
+.dark .survey-container .bg-slate-100 button.bg-white {
+  background-color: #475569 !important;
+  color: #ffffff !important;
+}
+
+/* Elementos del paso e indicadores */
+.dark .survey-container .bg-emerald-50 {
+  background-color: #ecfdf5 !important;
+  color: #065f46 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.dark .survey-container .text-emerald-700 {
+  color: #047857 !important;
+}
