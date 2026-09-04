@@ -376,6 +376,24 @@ const TwoFactorPinModal = ({ isOpen, onClose, onVerify, expectedPin, onResendPin
               {t.sentToLabel} <span className="text-emerald-600 dark:text-emerald-400 font-black">{emailOrAccount}</span>
             </div>
           )}
+
+          {expectedPin && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 p-3.5 rounded-2xl text-xs font-bold text-center border border-emerald-200 dark:border-emerald-800/40 space-y-1 animate-fadeIn">
+              <p className="opacity-90">💡 Código de acceso 2FA (Modo Demo / Pruebas):</p>
+              <p className="text-xl tracking-widest font-black text-emerald-600 dark:text-emerald-400 select-all">{expectedPin}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const digits = expectedPin.split('');
+                  setPinDigits(digits);
+                  setError('');
+                }}
+                className="text-[11px] underline text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-white cursor-pointer font-bold block mx-auto pt-1 active:scale-95 transition-all"
+              >
+                ⚡ Auto-completar código
+              </button>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
