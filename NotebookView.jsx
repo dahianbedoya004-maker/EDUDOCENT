@@ -562,6 +562,95 @@ const generateFallbackNotebookAIResponse = (userPrompt, systemPrompt) => {
   const topicMatch = (userPrompt || '').match(/tema[^:|]*[:|]\s*([^|]+)/i) || (userPrompt || '').match(/materia[^:|]*[:|]\s*([^|]+)/i);
   const topicName = topicMatch ? topicMatch[1].trim() : 'Unidad Temática y Contenidos del Grado';
 
+  // 1. TALLERES PRÁCTICOS / GUÍAS DE EJERCICIOS (CHECK FIRST!)
+  if (promptLower.includes('taller') || promptLower.includes('ejercicio') || promptLower.includes('worksheet') || promptLower.includes('práctica')) {
+    if (isEnglish) {
+      return `### 📝 Practical Workshop No. 1: Application Exercises
+**Topic:** ${topicName} | **Student Name:** ____________________ | **Date:** ________
+
+#### 🔹 Activity 1: Case Study Analysis
+> *Instruction:* Read the case below carefully and answer the questions.
+
+*Case Scenario:* A practical situation where students must apply the core concepts of **${topicName}**.
+
+1. What is the key concept required to solve this scenario?
+   __________________________________________________________________________________
+2. List 2 step-by-step actions to complete the task successfully:
+   - Step A: ________________________________________________________________________
+   - Step B: ________________________________________________________________________
+
+---
+
+#### 🔹 Activity 2: Matching Column Exercise
+> *Instruction:* Match each term on the left with its corresponding description on the right.
+
+1. Core Concept of ${topicName}        ---------> (  ) Practical classroom application.
+2. Main Rule / Procedure            ---------> (  ) Fundamental definition.
+3. Expected Learning Outcome        ---------> (  ) Goal achieved after completing the exercise.
+
+---
+
+### 📝 Practical Workshop No. 2: Creative Challenge
+**Topic:** ${topicName} | **Partner / Group:** ____________________
+
+#### 🚀 Team Challenge:
+Create your own original example demonstrating how **${topicName}** is used in everyday life.
+
+1. **Project Title:** ________________________________________________________
+2. **Short Description:** __________________________________________________
+3. **Diagram / Sketch Box:**
+   [ Draw or create your concept map in this box ]
+
+---
+#### 🔑 Formative UDL Check
+- [ ] I understood the main concept of the workshop.
+- [ ] I completed the tasks independently or with teacher support.
+`;
+    }
+
+    return `### 📝 Taller Práctico No. 1: Ejercicios de Aplicación Directa
+**Tema:** ${topicName} | **Estudiante:** ____________________ | **Fecha:** ________
+
+#### 🔹 Actividad 1: Análisis de Caso Práctico
+> *Instrucción:* Lee atentamente la siguiente situación y responde las preguntas con claridad.
+
+*Caso:* En una jornada escolar, se presenta un escenario donde los estudiantes deben aplicar los principios fundamentales de **${topicName}**.
+
+1. ¿Cuál es el concepto clave que permite solucionar este escenario?
+   __________________________________________________________________________________
+2. Explica 2 pasos indispensables para ejecutar la solución de forma correcta:
+   - Paso A: ________________________________________________________________________
+   - Paso B: ________________________________________________________________________
+
+---
+
+#### 🔹 Actividad 2: Emparejamiento de Términos
+> *Instrucción:* Relaciona cada concepto de la columna izquierda con su aplicación correspondiente en la columna derecha escribiendo el número correcto.
+
+1. Concepto Central de ${topicName}    ---------> (  ) Aplicación práctica en el salón de clase.
+2. Procedimiento o Regla Principal   ---------> (  ) Definición de base para el entendimiento del tema.
+3. Resultado o Conclusión Esperada    ---------> (  ) Meta alcanzada tras el desarrollo de los ejercicios.
+
+---
+
+### 📝 Taller Práctico No. 2: Desafío de Creación y Producción
+**Tema:** ${topicName} | **Grupo / Pareja:** ____________________
+
+#### 🚀 Reto Colaborativo:
+Diseña una propuesta o ejemplo propio donde demuestres cómo utilizas **${topicName}** en tu entorno cotidiano o escolar.
+
+1. **Título de tu Ejemplo:** __________________________________________________
+2. **Descripción Corta:** ____________________________________________________
+3. **Representación Gráfica o Esquema:**
+   [ Dibuja o realiza un diagrama en este espacio ]
+
+---
+#### 🔑 Criterio de Autoevaluación Formativa (DUA)
+- [ ] Logré comprender el concepto principal del taller.
+- [ ] Completé las actividades con autonomía o el apoyo del docente.
+`;
+  }
+
   // 1. PRESENTACIÓN CANVA / PPT (DIAPOSITIVAS)
   if (promptLower.includes('presentación') || promptLower.includes('ppt') || promptLower.includes('diapositiva') || promptLower.includes('canva') || promptLower.includes('slide')) {
     if (isEnglish) {
@@ -1566,6 +1655,30 @@ const ResultadoIACards = ({ resultado, onReset, onClose, showToast, onLaunchGame
   );
 };
 
+const formatMarkdownToHTML = (text) => {
+  if (!text) return '';
+  if (text.trim().startsWith('<') && text.includes('</')) {
+    return text;
+  }
+
+  let html = String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/^### (.*$)/gim, '<h3 style="font-size: 15px; font-weight: 800; color: #4338ca; margin: 18px 0 10px 0; border-bottom: 2px solid #e0e7ff; padding-bottom: 6px;">$1</h3>')
+    .replace(/^#### (.*$)/gim, '<h4 style="font-size: 13px; font-weight: 700; color: #1e293b; margin: 14px 0 6px 0;">$1</h4>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #0f172a;">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid #6366f1; background-color: #f8fafc; padding: 10px 14px; margin: 12px 0; border-radius: 0 10px 10px 0; font-style: italic; color: #334155;">$1</blockquote>')
+    .replace(/^- (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: #334155;">$1</li>')
+    .replace(/\[ \]/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 4px; vertical-align: middle; margin-right: 6px;"></span>')
+    .replace(/\(   \)/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 50%; vertical-align: middle; margin-right: 6px;"></span>')
+    .replace(/\n\n/g, '<div style="height: 12px;"></div>')
+    .replace(/\n/g, '<br/>');
+
+  return html;
+};
+
 // Fallback de texto libre
 const ResultadoTextoLibre = ({ texto, onReset, onClose, showToast, customTipo }) => {
   const isVideo = customTipo === 'Video Explicativo';
@@ -1598,7 +1711,7 @@ const ResultadoTextoLibre = ({ texto, onReset, onClose, showToast, customTipo })
       <div className="bg-white p-5 rounded-2xl border border-slate-200">
         <div
           className="ai-html-content text-xs text-slate-700 leading-relaxed font-medium"
-          dangerouslySetInnerHTML={{ __html: sanitizeHTML(texto) }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(texto)) }}
         />
       </div>
       <div className="flex gap-3 pt-2">
