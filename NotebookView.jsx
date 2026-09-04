@@ -557,9 +557,271 @@ const exportToWord = (titulo, resultado, showToast) => {
 // ==========================================
 const generateFallbackNotebookAIResponse = (userPrompt, systemPrompt) => {
   const isEnglish = (userPrompt || '').toLowerCase().includes('english') || (systemPrompt || '').toLowerCase().includes('english');
+  const promptLower = (userPrompt + ' ' + systemPrompt).toLowerCase();
+
   const topicMatch = (userPrompt || '').match(/tema[^:|]*[:|]\s*([^|]+)/i) || (userPrompt || '').match(/materia[^:|]*[:|]\s*([^|]+)/i);
   const topicName = topicMatch ? topicMatch[1].trim() : 'Unidad Temática y Contenidos del Grado';
 
+  // 1. PRESENTACIÓN CANVA / PPT (DIAPOSITIVAS)
+  if (promptLower.includes('presentación') || promptLower.includes('ppt') || promptLower.includes('diapositiva') || promptLower.includes('canva') || promptLower.includes('slide')) {
+    if (isEnglish) {
+      return `### 🖥️ Slide Structure for Canva / PowerPoint Presentation
+**Topic:** ${topicName}
+
+---
+#### 📄 Slide 1: Title & Overview
+- **Main Title:** ${topicName}
+- **Subtitle:** Interactive Classroom Guide & Core Concepts
+- **Visual Prompt (Canva):** High-contrast educational vector art with key icons.
+- **Speaker Notes:** Welcome students, present daily learning goal, and initiate 2-min warmup question.
+
+---
+#### 📄 Slide 2: Learning Objectives & Goals
+- **What will we master today?:**
+  1. Key definitions and historical/conceptual context of ${topicName}.
+  2. Practical step-by-step examples and real-world relevance.
+  3. Collaborative pair exercise & quick check-for-understanding.
+- **Speaker Notes:** Explain objectives in accessible language for all student profiles.
+
+---
+#### 📄 Slide 3: Core Concept Breakdown
+- **Key Definition:** Main theoretical and practical framework.
+- **Visual Layout:** 3-step structured infographic.
+- **Speaker Notes:** Pause for diagnostic questions and quick student feedback.
+
+---
+#### 📄 Slide 4: Guided Examples & Pair Challenge
+- **Real-World Example:** Everyday application of ${topicName}.
+- **Pair Activity:** 5-minute partner discussion ticket.
+- **Speaker Notes:** Circulate around the room providing UDL scaffolding.
+
+---
+#### 📄 Slide 5: Summary & Exit Ticket
+- **Key Takeaways:** 3 essential bullet points to remember.
+- **Exit Question:** "What was your main insight during today's lesson?"
+`;
+    }
+
+    return `### 🖥️ Estructura para Presentación Canva / PowerPoint (Diapositivas)
+**Tema:** ${topicName}
+
+---
+#### 📄 Diapositiva 1: Portada e Introducción
+- **Título Principal:** ${topicName}
+- **Subtítulo:** Guía Didáctica e Interactiva para el Aula
+- **Sugerencia Visual (Canva):** Ilustración vectorial temática de alto contraste con iconos representativos.
+- **Notas del Orador:** Bienvenida a los estudiantes, presentación del propósito del día y pregunta activadora.
+
+---
+#### 📄 Diapositiva 2: Objetivos de Aprendizaje
+- **¿Qué aprenderemos hoy?:**
+  1. Definición y conceptos fundamentales de ${topicName}.
+  2. Identificación de características clave y ejemplos prácticos.
+  3. Aplicación en actividades colaborativas del entorno escolar.
+- **Notas del Orador:** Explicar los objetivos en lenguaje accesible de Lectura Fácil.
+
+---
+#### 📄 Diapositiva 3: Explicación y Conceptos Clave
+- **Contenido Central:** Desglose estructurado de los elementos principales de ${topicName}.
+- **Esquema Gráfico:** Mapa visual de 3 pasos o infografía conceptual.
+- **Notas del Orador:** Realizar pausas breves de comprensión y resolver dudas iniciales.
+
+---
+#### 📄 Diapositiva 4: Ejemplos Prácticos y Desafío en Parejas
+- **Ejemplo Cotidiano:** Aplicación directa del tema en la vida real.
+- **Reto Práctico:** Ejercicio en parejas de 5 minutos.
+- **Notas del Orador:** Monitorear el aula ofreciendo apoyos DUA a quienes lo requieran.
+
+---
+#### 📄 Diapositiva 5: Resumen y Ticket de Salida
+- **Ideas Clave:** 3 puntos indispensables para recordar.
+- **Reflexión de Cierre:** "¿Cuál fue el aprendizaje más valioso de la sesión?"
+`;
+  }
+
+  // 2. QUIZ IMPRIMIBLE / EXÁMENES / EVALUACIONES
+  if (promptLower.includes('quiz') || promptLower.includes('examen') || promptLower.includes('evaluación') || promptLower.includes('prueba') || promptLower.includes('test')) {
+    if (isEnglish) {
+      return `### 📝 Printable Quiz & Formative Assessment (Accessible Format)
+**Topic:** ${topicName} | **Student Name:** ____________________ | **Grade:** _____
+
+---
+#### ❓ Question 1: Multiple Choice
+What is the core definition or main purpose of **${topicName}**?
+- [ ] A) A theoretical concept without practical application.
+- [ ] B) An essential foundation that structures key knowledge in this unit.
+- [ ] C) A tool used exclusively in advanced research.
+- [ ] D) None of the above.
+
+---
+#### ❓ Question 2: True or False
+Indicate whether the following statement is True (T) or False (F):
+> *"The principles of ${topicName} can be applied to solve real-life classroom problems."*
+- (   ) True (T)
+- (   ) False (F)
+
+---
+#### ❓ Question 3: Multiple Choice (Practical Application)
+Which of the following is a direct example of applying **${topicName}**?
+- [ ] A) Collaborative problem-solving using structured steps.
+- [ ] B) Memorizing facts without understanding their meaning.
+- [ ] C) Ignoring instructions and procedures.
+- [ ] D) Passive reading with no critical reflection.
+
+---
+#### ❓ Question 4: Fill in the Blank
+Complete the sentence:
+> *"The primary goal of learning ${topicName} is to develop ___________ and meaningful skills."*
+
+---
+#### ❓ Question 5: Short Answer & Reflection
+In your own words, explain why studying **${topicName}** is useful in daily life:
+__________________________________________________________________________________
+__________________________________________________________________________________
+
+---
+#### 🔑 Teacher Answer Key & Rubric
+1. **B** | 2. **True (T)** | 3. **A** | 4. **Practical / Interactive** | 5. **Qualitative Evaluation**
+`;
+    }
+
+    return `### 📝 Quiz Imprimible y Evaluación Formativa (Lectura Fácil)
+**Tema:** ${topicName} | **Nombre del Estudiante:** ____________________ | **Grado:** _____
+
+---
+#### ❓ Pregunta 1: Selección Múltiple
+¿Cuál es la definición o propósito central de **${topicName}**?
+- [ ] A) Una teoría sin aplicación práctica en el aula.
+- [ ] B) Un concepto fundamental que organiza los saberes de esta unidad.
+- [ ] C) Una herramienta exclusiva de investigaciones avanzadas.
+- [ ] D) Ninguna de las anteriores.
+
+---
+#### ❓ Pregunta 2: Verdadero o Falso
+Indica si la siguiente afirmación es Verdadera (V) o Falsa (F):
+> *"Los conceptos de ${topicName} se pueden aplicar para resolver problemas reales del entorno escolar."*
+- (   ) Verdadero (V)
+- (   ) Falso (F)
+
+---
+#### ❓ Pregunta 3: Selección Múltiple (Aplicación Práctica)
+¿Cuál de los siguientes ejemplos corresponde a la aplicación directa de **${topicName}**?
+- [ ] A) Trabajo colaborativo y resolución de problemas por pasos.
+- [ ] B) Memorización mecánica de datos sin comprensión.
+- [ ] C) Omisión de reglas y pautas didácticas.
+- [ ] D) Lectura pasiva sin interpretación crítica.
+
+---
+#### ❓ Pregunta 4: Completar la Oración
+Completa el espacio en blanco con la palabra adecuada:
+> *"El objetivo de aprender ${topicName} es desarrollar habilidades ___________ e inclusivas."*
+
+---
+#### ❓ Pregunta 5: Respuesta Corta y Reflexión
+Con tus propias palabras, explica por qué es importante aprender sobre **${topicName}**:
+__________________________________________________________________________________
+__________________________________________________________________________________
+
+---
+#### 🔑 Clave de Respuestas (Para el Docente)
+1. **Respuesta B** | 2. **Verdadero (V)** | 3. **Respuesta A** | 4. **Prácticas / Significativas** | 5. **Criterio Cualitativo DUA**
+`;
+  }
+
+  // 3. JUEGOS EN LÍNEA / ACTIVIDADES LÚDICAS
+  if (promptLower.includes('juego') || promptLower.includes('lúdica') || promptLower.includes('game') || promptLower.includes('kahoot') || promptLower.includes('wordwall') || promptLower.includes('educaplay')) {
+    if (isEnglish) {
+      return `### 🎮 Recommended Interactive Educational Games
+**Topic:** ${topicName}
+
+---
+#### 🕹️ Game 1: Interactive Question Wheel (Wordwall)
+- **Platform:** Wordwall
+- **Direct Creation Link:** [Create Game on Wordwall](https://wordwall.net)
+- **Game Rules:** Students spin the interactive wheel and answer challenge questions on **${topicName}**.
+
+---
+#### 🕹️ Game 2: Real-Time Classroom Trivia (Kahoot / Quizizz)
+- **Platform:** Kahoot / Quizizz
+- **Direct Creation Link:** [Create Quiz on Kahoot](https://kahoot.com)
+- **Game Rules:** 5 to 10 timed questions displayed live on screen for individual or group points.
+
+---
+#### 🕹️ Game 3: Concept & Definition Memory Match (Educaplay)
+- **Platform:** Educaplay
+- **Direct Creation Link:** [Create Game on Educaplay](https://www.educaplay.com)
+- **Game Rules:** Pair terms related to **${topicName}** with visual icons or short definitions.
+`;
+    }
+
+    return `### 🎮 Juegos Educativos e Interactivos Recomendados
+**Tema:** ${topicName}
+
+---
+#### 🕹️ Juego 1: Ruleta Giratoria de Preguntas (Wordwall)
+- **Plataforma Recomendada:** Wordwall
+- **Enlace de Creación Directa:** [Crear Ruleta en Wordwall](https://wordwall.net/es)
+- **Reglas del Juego:** Los estudiantes giran la ruleta digital y responden la pregunta o reto sobre **${topicName}** donde se detenga la flecha.
+
+---
+#### 🕹️ Juego 2: Desafío de Trivia en Vivo (Kahoot / Quizizz)
+- **Plataforma Recomendada:** Kahoot / Quizizz
+- **Enlace de Creación Directa:** [Crear Quiz en Kahoot](https://kahoot.com)
+- **Reglas del Juego:** 5 a 10 preguntas con límite de tiempo proyectadas en pantalla para sumar puntos en equipo.
+
+---
+#### 🕹️ Juego 3: Parejas de Memoria y Conceptos (Educaplay)
+- **Plataforma Recomendada:** Educaplay
+- **Enlace de Creación Directa:** [Crear Juego en Educaplay](https://es.educaplay.com)
+- **Reglas del Juego:** Emparejar las tarjetas de conceptos de **${topicName}** con su icono o definición en el menor tiempo posible.
+`;
+  }
+
+  // 4. VIDEOS Y RECURSOS MULTIMEDIA
+  if (promptLower.includes('video') || promptLower.includes('multimedia') || promptLower.includes('youtube')) {
+    return `### 🎬 Videos Educativos y Recursos Multimedia Recomendados
+**Tema:** ${topicName}
+
+---
+#### 🎥 Video 1: Explicación Didáctica Animada (3 - 5 min)
+- **Título Recomendado:** Introducción sencilla a ${topicName}
+- **Búsqueda en YouTube:** [Buscar Video Explicativo](https://www.youtube.com/results?search_query=${encodeURIComponent(topicName + ' explicacion didactica')})
+- **Actividad:** Pausa en el minuto 2:00 para resolver 1 pregunta de verificación en el tablero.
+
+---
+#### 🎥 Video 2: Ejemplos Prácticos de la Vida Real (4 min)
+- **Título Recomendado:** ${topicName} en el mundo real
+- **Búsqueda en YouTube:** [Buscar Ejemplos Reales](https://www.youtube.com/results?search_query=${encodeURIComponent(topicName + ' ejemplos cotidianos')})
+- **Actividad:** Discusión guiada de 5 minutos en parejas sobre lo observado.
+`;
+  }
+
+  // 5. TALLERES / GUÍAS DE EJERCICIOS Y PRÁCTICAS
+  if (promptLower.includes('taller') || promptLower.includes('ejercicio') || promptLower.includes('worksheet') || promptLower.includes('práctica')) {
+    return `### 📝 Taller Práctico de Aplicación y Ejercicios
+**Tema:** ${topicName} | **Estudiante:** ____________________
+
+---
+#### 🔹 Ejercicio 1: Caso Práctico Guiado
+Analiza la siguiente situación sobre **${topicName}**:
+> *Situación:* Se presenta un problema cotidiano donde es necesario aplicar los conceptos aprendidos hoy.
+- **Paso 1:** Identifica el elemento principal del problema.
+- **Paso 2:** Escribe 2 pasos clave para resolverlo.
+
+---
+#### 🔹 Ejercicio 2: Relación de Términos
+Une con una línea cada concepto con su correspondiente aplicación:
+1. Concepto A  ---------> (  ) Aplicación práctica en el salón.
+2. Concepto B  ---------> (  ) Definición central del tema.
+3. Concepto C  ---------> (  ) Resultado final esperado.
+
+---
+#### 🔹 Ejercicio 3: Reto de Creación Propia
+Diseña tu propio ejemplo práctico de **${topicName}** y compártelo con tu compañero de mesa.
+`;
+  }
+
+  // 6. DEFAULT: PLAN DE CLASE Y GUÍA DUA COMPLETA
   if (isEnglish) {
     return `### 📘 AI Educational Guide & Lesson Plan
 **Topic:** ${topicName}
