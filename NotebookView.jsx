@@ -557,13 +557,15 @@ const exportToWord = (titulo, resultado, showToast) => {
 // ==========================================
 const generateFallbackNotebookAIResponse = (userPrompt, systemPrompt) => {
   const isEnglish = (userPrompt || '').toLowerCase().includes('english') || (systemPrompt || '').toLowerCase().includes('english');
-  const promptLower = (userPrompt + ' ' + systemPrompt).toLowerCase();
 
   const topicMatch = (userPrompt || '').match(/tema[^:|]*[:|]\s*([^|]+)/i) || (userPrompt || '').match(/materia[^:|]*[:|]\s*([^|]+)/i);
   const topicName = topicMatch ? topicMatch[1].trim() : 'Unidad Temática y Contenidos del Grado';
 
-  // 1. TALLERES PRÁCTICOS / GUÍAS DE EJERCICIOS (CHECK FIRST!)
-  if (promptLower.includes('taller') || promptLower.includes('ejercicio') || promptLower.includes('worksheet') || promptLower.includes('práctica')) {
+  const necesidadMatch = (userPrompt || '').match(/necesidad[^:|]*[:|]\s*([^|]+)/i);
+  const nStr = necesidadMatch ? necesidadMatch[1].trim().toLowerCase() : (userPrompt + ' ' + systemPrompt).toLowerCase();
+
+  // 5. TALLERES PRÁCTICOS / GUÍAS DE EJERCICIOS
+  if (nStr.includes('taller') || nStr.includes('ejercicio') || nStr.includes('worksheet') || nStr.includes('práctica')) {
     if (isEnglish) {
       return `### 📝 Practical Workshop No. 1: Application Exercises
 **Topic:** ${topicName} | **Student Name:** ____________________ | **Date:** ________
@@ -652,7 +654,7 @@ Diseña una propuesta o ejemplo propio donde demuestres cómo utilizas **${topic
   }
 
   // 1. PRESENTACIÓN CANVA / PPT (DIAPOSITIVAS)
-  if (promptLower.includes('presentación') || promptLower.includes('ppt') || promptLower.includes('diapositiva') || promptLower.includes('canva') || promptLower.includes('slide')) {
+  if (nStr.includes('presentación') || nStr.includes('ppt') || nStr.includes('diapositiva') || nStr.includes('canva') || nStr.includes('slide')) {
     if (isEnglish) {
       return `### 🖥️ Slide Structure for Canva / PowerPoint Presentation
 **Topic:** ${topicName}
@@ -729,7 +731,7 @@ Diseña una propuesta o ejemplo propio donde demuestres cómo utilizas **${topic
   }
 
   // 2. QUIZ IMPRIMIBLE / EXÁMENES / EVALUACIONES
-  if (promptLower.includes('quiz') || promptLower.includes('examen') || promptLower.includes('evaluación') || promptLower.includes('prueba') || promptLower.includes('test')) {
+  if (nStr.includes('quiz') || nStr.includes('examen') || nStr.includes('evaluación') || nStr.includes('prueba') || nStr.includes('test')) {
     if (isEnglish) {
       return `### 📝 Printable Quiz & Formative Assessment (Accessible Format)
 **Topic:** ${topicName} | **Student Name:** ____________________ | **Grade:** _____
@@ -818,7 +820,7 @@ ________________________________________________________________________________
   }
 
   // 3. JUEGOS EN LÍNEA / ACTIVIDADES LÚDICAS
-  if (promptLower.includes('juego') || promptLower.includes('lúdica') || promptLower.includes('game') || promptLower.includes('kahoot') || promptLower.includes('wordwall') || promptLower.includes('educaplay')) {
+  if (nStr.includes('juego') || nStr.includes('lúdica') || nStr.includes('game') || nStr.includes('kahoot') || nStr.includes('wordwall') || nStr.includes('educaplay')) {
     if (isEnglish) {
       return `### 🎮 Recommended Interactive Educational Games
 **Topic:** ${topicName}
@@ -867,7 +869,7 @@ ________________________________________________________________________________
   }
 
   // 4. VIDEOS Y RECURSOS MULTIMEDIA
-  if (promptLower.includes('video') || promptLower.includes('multimedia') || promptLower.includes('youtube')) {
+  if (nStr.includes('video') || nStr.includes('multimedia') || nStr.includes('youtube')) {
     return `### 🎬 Videos Educativos y Recursos Multimedia Recomendados
 **Tema:** ${topicName}
 
