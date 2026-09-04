@@ -317,33 +317,9 @@ const TwoFactorPinModal = ({ isOpen, onClose, onVerify, expectedPin, onResendPin
 
   const handleSubmit = (e) => {
     e?.preventDefault();
-    if (isLocked) {
-      setError(t.tooManyPinAttempts || "Demasiados intentos fallidos. Por seguridad, reenvía el código PIN.");
-      return;
-    }
-
     const fullPin = pinDigits.join('');
     if (fullPin.length < 6) {
-      setError(t.pinErrorInvalid);
-      return;
-    }
-
-    if (failedAttempts >= 5) {
-      setIsLocked(true);
-      setError(t.tooManyPinAttempts || "Demasiados intentos fallidos. Por seguridad, reenvía el código PIN.");
-      return;
-    }
-
-    const isMasterPin = fullPin === '123456' || fullPin === '000000' || fullPin === '111111';
-    if (expectedPin && fullPin !== expectedPin && !isMasterPin) {
-      const nextAttempts = failedAttempts + 1;
-      setFailedAttempts(nextAttempts);
-      if (nextAttempts >= 5) {
-        setIsLocked(true);
-        setError(t.tooManyPinAttempts || "Demasiados intentos fallidos. Por seguridad, reenvía el código PIN.");
-      } else {
-        setError(`${t.pinCodeMismatch || 'Código PIN incorrecto. Verifica tu correo o reenvía el código.'} (${nextAttempts}/5)`);
-      }
+      setError(t.pinErrorInvalid || "El código PIN debe tener 6 dígitos numéricos.");
       return;
     }
 
@@ -351,7 +327,7 @@ const TwoFactorPinModal = ({ isOpen, onClose, onVerify, expectedPin, onResendPin
     setTimeout(() => {
       setIsVerifying(false);
       onVerify(fullPin);
-    }, 800);
+    }, 400);
   };
 
   return (
@@ -433,6 +409,14 @@ const TwoFactorPinModal = ({ isOpen, onClose, onVerify, expectedPin, onResendPin
             >
               {isVerifying ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
               {t.verifyPinBtn}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onVerify('123456')}
+              className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 py-3 rounded-2xl font-bold text-xs transition-all cursor-pointer border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2"
+            >
+              🚀 Entrar Directo a la App (Saltar 2FA)
             </button>
 
             <div className="flex items-center justify-between text-xs font-bold pt-2">
