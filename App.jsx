@@ -39,34 +39,71 @@ const formatMarkdownToHTML = (text) => {
 
   let raw = String(text);
 
+  // 1. Normalizar saltos de línea
   raw = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  raw = raw.replace(/([^\n])\s*(#{1,6}\s+)/g, '$1\n\n$2');
 
-  raw = raw.replace(/(?:(?:^|\n)\|[^\n]+\|\s*)+/g, (match) => {
-    const lines = match.trim().split('\n').filter(l => l.trim().startsWith('|'));
-    if (lines.length < 2) return match;
+  // 2. Asegurar que encabezados ### tengan salto previo si venían pegados a texto
+  raw = raw.replace(/([^#\n])\s*(#{1,6}\s+)/g, '$1\n\n$2');
 
-    let tableHTML = '<table style="width:100%; border-collapse:collapse; margin:14px 0; font-size:12px; border:1px solid #cbd5e1;">';
-    let isHeader = true;
-    lines.forEach((line) => {
-      if (line.includes('---') || line.includes(':---')) return;
-      const cells = line.split('|').slice(1, -1).map(c => c.trim());
-      if (cells.length === 0) return;
+  // 3. Convertir tablas Markdown a HTML
+  const lines = raw.split('\n');
+  const resultLines = [];
+  let inTable = false;
+  let tableLines = [];
 
-      if (isHeader) {
-        tableHTML += '<thead style="background-color:#4f46e5; color:white;"><tr>' +
-          cells.map(c => `<th style="border:1px solid #4338ca; padding:8px; text-align:left; font-weight:bold;">${c}</th>`).join('') +
-          '</tr></thead><tbody>';
-        isHeader = false;
-      } else {
-        tableHTML += '<tr>' +
-          cells.map(c => `<td style="border:1px solid #cbd5e1; padding:8px;">${c}</td>`).join('') +
-          '</tr>';
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      inTable = true;
+      tableLines.push(line);
+    } else {
+      if (inTable) {
+        const valid = tableLines.filter(l => !l.includes('---') && !l.includes(':---'));
+        if (valid.length > 0) {
+          let tableHTML = '<table style="width:100%; border-collapse:collapse; margin:14px 0; font-size:12px; border:1px solid #cbd5e1;">';
+          valid.forEach((tl, idx) => {
+            const cells = tl.split('|').slice(1, -1).map(c => c.trim());
+            if (idx === 0) {
+              tableHTML += '<thead style="background-color:#4f46e5; color:white;"><tr>' +
+                cells.map(c => `<th style="border:1px solid #4338ca; padding:8px; text-align:left; font-weight:bold;">${c}</th>`).join('') +
+                '</tr></thead><tbody>';
+            } else {
+              tableHTML += '<tr>' +
+                cells.map(c => `<td style="border:1px solid #cbd5e1; padding:8px;">${c}</td>`).join('') +
+                '</tr>';
+            }
+          });
+          tableHTML += '</tbody></table>';
+          resultLines.push(tableHTML);
+        }
+        tableLines = [];
+        inTable = false;
       }
-    });
-    tableHTML += '</tbody></table>';
-    return tableHTML;
-  });
+      resultLines.push(line);
+    }
+  }
+  if (inTable) {
+    const valid = tableLines.filter(l => !l.includes('---') && !l.includes(':---'));
+    if (valid.length > 0) {
+      let tableHTML = '<table style="width:100%; border-collapse:collapse; margin:14px 0; font-size:12px; border:1px solid #cbd5e1;">';
+      valid.forEach((tl, idx) => {
+        const cells = tl.split('|').slice(1, -1).map(c => c.trim());
+        if (idx === 0) {
+          tableHTML += '<thead style="background-color:#4f46e5; color:white;"><tr>' +
+            cells.map(c => `<th style="border:1px solid #4338ca; padding:8px; text-align:left; font-weight:bold;">${c}</th>`).join('') +
+            '</tr></thead><tbody>';
+        } else {
+          tableHTML += '<tr>' +
+            cells.map(c => `<td style="border:1px solid #cbd5e1; padding:8px;">${c}</td>`).join('') +
+            '</tr>';
+        }
+      });
+      tableHTML += '</tbody></table>';
+      resultLines.push(tableHTML);
+    }
+  }
+
+  raw = resultLines.join('\n');
 
   let html = raw
     .replace(/^##### (.*$)/gim, '<h5 style="font-size: 13px; font-weight: 700; color: #0284c7; margin: 12px 0 4px 0;">$1</h5>')
