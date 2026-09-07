@@ -301,7 +301,13 @@ const formatMarkdownToHTML = (text) => {
     return text;
   }
 
-  let raw = text;
+  let raw = String(text);
+
+  // Normalizar saltos de línea
+  raw = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Asegurar que encabezados ### tengan salto previo
+  raw = raw.replace(/([^\n])\s*(#{1,6}\s+)/g, '$1\n\n$2');
 
   // Convertir tablas Markdown (| Header 1 | Header 2 |) a tablas HTML estructuradas
   raw = raw.replace(/(?:(?:^|\n)\|[^\n]+\|\s*)+/g, (match) => {
@@ -331,15 +337,16 @@ const formatMarkdownToHTML = (text) => {
   });
 
   let html = raw
+    .replace(/^##### (.*$)/gim, '<h5 style="font-size: 13px; font-weight: 700; color: #0284c7; margin: 12px 0 4px 0;">$1</h5>')
+    .replace(/^#### (.*$)/gim, '<h4 style="font-size: 14px; font-weight: 700; color: #1e293b; margin: 14px 0 6px 0;">$1</h4>')
     .replace(/^### (.*$)/gim, '<h3 style="font-size: 15px; font-weight: 800; color: #4338ca; margin: 18px 0 10px 0; border-bottom: 2px solid #e0e7ff; padding-bottom: 6px;">$1</h3>')
-    .replace(/^#### (.*$)/gim, '<h4 style="font-size: 13px; font-weight: 700; color: #1e293b; margin: 14px 0 6px 0;">$1</h4>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #0f172a;">$1</strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #0f172a; font-weight: bold;">$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid #6366f1; background-color: #f8fafc; padding: 10px 14px; margin: 12px 0; border-radius: 0 10px 10px 0; font-style: italic; color: #334155;">$1</blockquote>')
-    .replace(/^- (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: #334155;">$1</li>')
+    .replace(/^[*-] (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: #334155;">$1</li>')
     .replace(/\[ \]/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 4px; vertical-align: middle; margin-right: 6px;"></span>')
     .replace(/\(   \)/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 50%; vertical-align: middle; margin-right: 6px;"></span>')
-    .replace(/\n\n/g, '<div style="height: 12px;"></div>')
+    .replace(/\n\n+/g, '<div style="height: 12px;"></div>')
     .replace(/\n/g, '<br/>');
 
   return html;

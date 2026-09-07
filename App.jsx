@@ -29,6 +29,61 @@ const escapeHTML = (str) => {
     .replace(/'/g, '&#039;');
 };
 
+const formatMarkdownToHTML = (text) => {
+  if (!text) return '';
+  if (typeof text !== 'string') return text;
+  
+  if (text.trim().startsWith('<') && (text.includes('</') || text.includes('/>'))) {
+    return text;
+  }
+
+  let raw = String(text);
+
+  raw = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  raw = raw.replace(/([^\n])\s*(#{1,6}\s+)/g, '$1\n\n$2');
+
+  raw = raw.replace(/(?:(?:^|\n)\|[^\n]+\|\s*)+/g, (match) => {
+    const lines = match.trim().split('\n').filter(l => l.trim().startsWith('|'));
+    if (lines.length < 2) return match;
+
+    let tableHTML = '<table style="width:100%; border-collapse:collapse; margin:14px 0; font-size:12px; border:1px solid #cbd5e1;">';
+    let isHeader = true;
+    lines.forEach((line) => {
+      if (line.includes('---') || line.includes(':---')) return;
+      const cells = line.split('|').slice(1, -1).map(c => c.trim());
+      if (cells.length === 0) return;
+
+      if (isHeader) {
+        tableHTML += '<thead style="background-color:#4f46e5; color:white;"><tr>' +
+          cells.map(c => `<th style="border:1px solid #4338ca; padding:8px; text-align:left; font-weight:bold;">${c}</th>`).join('') +
+          '</tr></thead><tbody>';
+        isHeader = false;
+      } else {
+        tableHTML += '<tr>' +
+          cells.map(c => `<td style="border:1px solid #cbd5e1; padding:8px;">${c}</td>`).join('') +
+          '</tr>';
+      }
+    });
+    tableHTML += '</tbody></table>';
+    return tableHTML;
+  });
+
+  let html = raw
+    .replace(/^##### (.*$)/gim, '<h5 style="font-size: 13px; font-weight: 700; color: #0284c7; margin: 12px 0 4px 0;">$1</h5>')
+    .replace(/^#### (.*$)/gim, '<h4 style="font-size: 14px; font-weight: 700; color: #1e293b; margin: 14px 0 6px 0;">$1</h4>')
+    .replace(/^### (.*$)/gim, '<h3 style="font-size: 15px; font-weight: 800; color: #4338ca; margin: 18px 0 10px 0; border-bottom: 2px solid #e0e7ff; padding-bottom: 6px;">$1</h3>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #0f172a; font-weight: bold;">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid #6366f1; background-color: #f8fafc; padding: 10px 14px; margin: 12px 0; border-radius: 0 10px 10px 0; font-style: italic; color: #334155;">$1</blockquote>')
+    .replace(/^[*-] (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: #334155;">$1</li>')
+    .replace(/\[ \]/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 4px; vertical-align: middle; margin-right: 6px;"></span>')
+    .replace(/\(   \)/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 50%; vertical-align: middle; margin-right: 6px;"></span>')
+    .replace(/\n\n+/g, '<div style="height: 12px;"></div>')
+    .replace(/\n/g, '<br/>');
+
+  return html;
+};
+
 const isSafeUrl = (url) => {
   if (!url) return false;
   const trimmed = url.trim().toLowerCase();
@@ -2437,23 +2492,23 @@ Genera las siguientes 4 adaptaciones específicas y prácticas para el docente:
 
         <div style="margin-top: 20px; padding: 15px; border-left: 4px solid #3b82f6; background-color: #f8fafc; border-radius: 6px;">
           <h3 style="color: #1e40af; margin-top: 0;">📝 ${escapeHTML(language === 'en' ? '1. Adapted Quiz (Easy Reading)' : '1. Quiz Adaptado (Lectura Fácil)')}</h3>
-          <p style="white-space: pre-line; line-height: 1.6; color: #334155;">${escapeHTML(result.quiz)}</p>
+          <div style="line-height: 1.6; color: #334155;">${formatMarkdownToHTML(result.quiz)}</div>
         </div>
 
         <div style="margin-top: 20px; padding: 15px; border-left: 4px solid #f97316; background-color: #f8fafc; border-radius: 6px;">
           <h3 style="color: #c2410c; margin-top: 0;">🎮 ${escapeHTML(language === 'en' ? '2. Web Game / Interactive Activity' : '2. Recomendación de Juego Web / Actividad Lúdica')}</h3>
-          <p style="white-space: pre-line; line-height: 1.6; color: #334155;">${escapeHTML(result.game)}</p>
+          <div style="line-height: 1.6; color: #334155;">${formatMarkdownToHTML(result.game)}</div>
         </div>
 
         <div style="margin-top: 20px; padding: 15px; border-left: 4px solid #a855f7; background-color: #f8fafc; border-radius: 6px;">
           <h3 style="color: #7e22ce; margin-top: 0;">🖥️ ${escapeHTML(language === 'en' ? '3. Slide Structure & Visual Sequence' : '3. Estructura para Diapositivas y Apoyos Visuales')}</h3>
-          <p style="white-space: pre-line; line-height: 1.6; color: #334155;">${escapeHTML(result.presentation)}</p>
+          <div style="line-height: 1.6; color: #334155;">${formatMarkdownToHTML(result.presentation)}</div>
         </div>
 
         ${result.evaluation ? `
         <div style="margin-top: 20px; padding: 15px; border-left: 4px solid #10b981; background-color: #f8fafc; border-radius: 6px;">
           <h3 style="color: #047857; margin-top: 0;">📊 ${escapeHTML(language === 'en' ? '4. Flexible & Formative Assessment' : '4. Evaluación Flexible y Formativa')}</h3>
-          <p style="white-space: pre-line; line-height: 1.6; color: #334155;">${escapeHTML(result.evaluation)}</p>
+          <div style="line-height: 1.6; color: #334155;">${formatMarkdownToHTML(result.evaluation)}</div>
         </div>` : ''}
 
         <hr style="border: none; border-top: 1px dashed #cbd5e1; margin-top: 30px;" />
