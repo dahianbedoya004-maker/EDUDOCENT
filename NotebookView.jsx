@@ -291,14 +291,69 @@ Tu respuesta debe ser un objeto JSON con esta estructura exacta:
 }`;
 
 // ==========================================
-// FUNCIÓN: Genera un System Prompt personalizado según el recurso solicitado
+// FUNCIÓN: Formatear Markdown a HTML rico para Web y Word
 // ==========================================
-const getSystemPromptForResource = (necesidad) => {
+const formatMarkdownToHTML = (text) => {
+  if (!text) return '';
+  if (typeof text !== 'string') return text;
+  
+  if (text.trim().startsWith('<') && (text.includes('</') || text.includes('/>'))) {
+    return text;
+  }
+
+  let raw = text;
+
+  // Convertir tablas Markdown (| Header 1 | Header 2 |) a tablas HTML estructuradas
+  raw = raw.replace(/(?:(?:^|\n)\|[^\n]+\|\s*)+/g, (match) => {
+    const lines = match.trim().split('\n').filter(l => l.trim().startsWith('|'));
+    if (lines.length < 2) return match;
+
+    let tableHTML = '<table style="width:100%; border-collapse:collapse; margin:14px 0; font-size:12px; border:1px solid #cbd5e1;">';
+    let isHeader = true;
+    lines.forEach((line) => {
+      if (line.includes('---') || line.includes(':---')) return;
+      const cells = line.split('|').slice(1, -1).map(c => c.trim());
+      if (cells.length === 0) return;
+
+      if (isHeader) {
+        tableHTML += '<thead style="background-color:#4f46e5; color:white;"><tr>' +
+          cells.map(c => `<th style="border:1px solid #4338ca; padding:8px; text-align:left; font-weight:bold;">${c}</th>`).join('') +
+          '</tr></thead><tbody>';
+        isHeader = false;
+      } else {
+        tableHTML += '<tr>' +
+          cells.map(c => `<td style="border:1px solid #cbd5e1; padding:8px;">${c}</td>`).join('') +
+          '</tr>';
+      }
+    });
+    tableHTML += '</tbody></table>';
+    return tableHTML;
+  });
+
+  let html = raw
+    .replace(/^### (.*$)/gim, '<h3 style="font-size: 15px; font-weight: 800; color: #4338ca; margin: 18px 0 10px 0; border-bottom: 2px solid #e0e7ff; padding-bottom: 6px;">$1</h3>')
+    .replace(/^#### (.*$)/gim, '<h4 style="font-size: 13px; font-weight: 700; color: #1e293b; margin: 14px 0 6px 0;">$1</h4>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #0f172a;">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid #6366f1; background-color: #f8fafc; padding: 10px 14px; margin: 12px 0; border-radius: 0 10px 10px 0; font-style: italic; color: #334155;">$1</blockquote>')
+    .replace(/^- (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: #334155;">$1</li>')
+    .replace(/\[ \]/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 4px; vertical-align: middle; margin-right: 6px;"></span>')
+    .replace(/\(   \)/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 50%; vertical-align: middle; margin-right: 6px;"></span>')
+    .replace(/\n\n/g, '<div style="height: 12px;"></div>')
+    .replace(/\n/g, '<br/>');
+
+  return html;
+};
+
+// ==========================================
+// FUNCIÓN: Genera un System Prompt personalizado según el recurso e instrucciones
+// ==========================================
+const getSystemPromptForResource = (necesidad, instruccionesExtra = '') => {
   const baseInstructions = `Eres un asistente experto en planificación educativa, DUA y pedagogía. Tu objetivo es ahorrarle tiempo al docente proporcionando material listo para usar.
 REGLA DE ORO: Si el usuario incluye "Instrucciones" específicas (ej. cantidad de talleres, formato, enfoques particulares), DEBES obedecer estrictamente lo que pide el usuario por encima de cualquier regla por defecto de cantidad.
 Responde ÚNICAMENTE con un objeto JSON válido. No incluyas explicaciones de introducción o cierre fuera del JSON.`;
 
-  const necesidadClean = (necesidad || '').toLowerCase();
+  const necesidadClean = ((necesidad || '') + ' ' + (instruccionesExtra || '')).toLowerCase();
 
   if (necesidadClean.includes('presentación') || necesidadClean.includes('diapositivas') || necesidadClean.includes('canva') || necesidadClean.includes('ppt')) {
     return `${baseInstructions}
@@ -440,14 +495,17 @@ const exportToWord = (titulo, resultado, showToast) => {
   `;
 
   if (typeof resultado === 'string') {
-    bodyHTML += `<div style="margin-top: 15px;">${resultado}</div>`;
+    bodyHTML += `<div style="margin-top: 15px;">${formatMarkdownToHTML(resultado)}</div>`;
   } else if (resultado) {
+    if (resultado._texto_libre) {
+      bodyHTML += `<div style="margin-top: 15px;">${formatMarkdownToHTML(resultado._texto_libre)}</div>`;
+    }
     if (Array.isArray(resultado.clases_semanales) && resultado.clases_semanales.length > 0) {
       let tableRows = resultado.clases_semanales.map((c, idx) => `
         <tr>
           <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; color: #4f46e5;">Semana ${c.semana || idx + 1}</td>
           <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold;">${c.tema_suelto || ''}</td>
-          <td style="padding: 8px; border: 1px solid #cbd5e1;">${c.detalle_explicacion || ''}</td>
+          <td style="padding: 8px; border: 1px solid #cbd5e1;">${formatMarkdownToHTML(c.detalle_explicacion || '')}</td>
         </tr>
       `).join('');
 
@@ -473,7 +531,7 @@ const exportToWord = (titulo, resultado, showToast) => {
       bodyHTML += `
         <div style="margin-top: 20px;">
           <h3 style="color: #4f46e5; font-size: 14px;">1. Plan de 13 Clases Independientes</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${resultado.plan_13_clases}</div>
+          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.plan_13_clases)}</div>
         </div>
       `;
     }
@@ -481,7 +539,7 @@ const exportToWord = (titulo, resultado, showToast) => {
       bodyHTML += `
         <div style="margin-top: 20px;">
           <h3 style="color: #4f46e5; font-size: 14px;">Contenido Principal / Recurso</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${resultado.contenido_principal}</div>
+          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.contenido_principal)}</div>
         </div>
       `;
     }
@@ -489,7 +547,7 @@ const exportToWord = (titulo, resultado, showToast) => {
       bodyHTML += `
         <div style="margin-top: 20px;">
           <h3 style="color: #d97706; font-size: 14px;">2. Estructura para Presentaciones / Diapositivas (PowerPoint / Canva)</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${resultado.ideas_presentacion || resultado.estructura_presentacion}</div>
+          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.ideas_presentacion || resultado.estructura_presentacion)}</div>
         </div>
       `;
     }
@@ -497,7 +555,7 @@ const exportToWord = (titulo, resultado, showToast) => {
       bodyHTML += `
         <div style="margin-top: 20px;">
           <h3 style="color: #0284c7; font-size: 14px;">3. Recursos Online y Juegos Recomendados</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${resultado.recursos_online}</div>
+          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.recursos_online)}</div>
         </div>
       `;
     }
@@ -505,7 +563,7 @@ const exportToWord = (titulo, resultado, showToast) => {
       bodyHTML += `
         <div style="margin-top: 20px;">
           <h3 style="color: #7c3aed; font-size: 14px;">4. Adaptación Inclusiva (PIAR / DUA)</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${resultado.adaptacion_inclusiva}</div>
+          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.adaptacion_inclusiva)}</div>
         </div>
       `;
     }
@@ -513,7 +571,7 @@ const exportToWord = (titulo, resultado, showToast) => {
       bodyHTML += `
         <div style="margin-top: 20px;">
           <h3 style="color: #059669; font-size: 14px;">5. Guía para el Docente</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${resultado.guia_docente}</div>
+          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.guia_docente)}</div>
         </div>
       `;
     }
@@ -1777,7 +1835,7 @@ ${documentoBaseTexto}
     }
 
     try {
-      const baseSystemPrompt = getSystemPromptForResource(necesidad);
+      const baseSystemPrompt = getSystemPromptForResource(necesidad, instruccionesExtra);
       const isEnglishSubject = materiaActual.toLowerCase().includes('inglés') || materiaActual.toLowerCase().includes('english');
       const languageRule = isEnglishSubject
         ? "\nCRITICAL REQUIREMENT: YOU MUST GENERATE ALL THE CONTENT STRICTLY IN ENGLISH LANGUAGE, AS THIS IS AN ENGLISH CLASS. DO NOT USE SPANISH."
@@ -1908,6 +1966,27 @@ ${documentoBaseTexto}
                   <div className="flex gap-1.5 flex-wrap">
                     <button
                       type="button"
+                      onClick={() => setInstruccionesExtra("Genera una estructura de diapositivas slide por slide para Canva o PowerPoint sobre este tema.")}
+                      className="text-[10px] bg-orange-50 text-orange-700 font-bold px-3 py-1.5 rounded-xl border border-orange-100 hover:bg-orange-100 transition-colors"
+                    >
+                      📊 Diapositivas Canva / PPT
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInstruccionesExtra("Genera un mapa conceptual estructurado con jerarquía, nodos y conceptos clave para este tema.")}
+                      className="text-[10px] bg-teal-50 text-teal-700 font-bold px-3 py-1.5 rounded-xl border border-teal-100 hover:bg-teal-100 transition-colors"
+                    >
+                      🗺️ Mapa Conceptual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInstruccionesExtra("Genera 2 talleres prácticos con encabezado formal para estudiante (Nombre/Fecha) y ejercicios variados.")}
+                      className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-3 py-1.5 rounded-xl border border-emerald-100 hover:bg-emerald-100 transition-colors"
+                    >
+                      📝 Taller Práctico
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setInstruccionesExtra("Genera un plan de estudio detallado y estructurado en tabla HTML con semanas, actividades y objetivos de aprendizaje.")}
                       className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-3 py-1.5 rounded-xl border border-indigo-100 hover:bg-indigo-100 transition-colors"
                     >
@@ -1922,8 +2001,15 @@ ${documentoBaseTexto}
                     </button>
                     <button
                       type="button"
+                      onClick={() => setInstruccionesExtra("Genera un guion didáctico para video corto de 2 columnas (Visual y Audio).")}
+                      className="text-[10px] bg-rose-50 text-rose-700 font-bold px-3 py-1.5 rounded-xl border border-rose-100 hover:bg-rose-100 transition-colors"
+                    >
+                      🎬 Guion de Video
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setInstruccionesExtra("Recomienda y genera enlaces a juegos interactivos en línea (Wordwall, Kahoot, Educaplay, PhET) para este tema.")}
-                      className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-3 py-1.5 rounded-xl border border-emerald-100 hover:bg-emerald-100 transition-colors"
+                      className="text-[10px] bg-sky-50 text-sky-700 font-bold px-3 py-1.5 rounded-xl border border-sky-100 hover:bg-sky-100 transition-colors"
                     >
                       🎮 Juegos en Línea
                     </button>
