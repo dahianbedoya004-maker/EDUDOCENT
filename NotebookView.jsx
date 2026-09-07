@@ -888,7 +888,7 @@ ________________________________________________________________________________
   }
 
   // 5. TALLERES / GUÍAS DE EJERCICIOS Y PRÁCTICAS
-  if (promptLower.includes('taller') || promptLower.includes('ejercicio') || promptLower.includes('worksheet') || promptLower.includes('práctica')) {
+  if (nStr.includes('taller') || nStr.includes('ejercicio') || nStr.includes('worksheet') || nStr.includes('práctica')) {
     return `### 📝 Taller Práctico de Aplicación y Ejercicios
 **Tema:** ${topicName} | **Estudiante:** ____________________
 
