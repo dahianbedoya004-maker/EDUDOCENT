@@ -42,6 +42,13 @@ const escapeHTML = (str) => {
     .replace(/'/g, '&#039;');
 };
 
+const sanitizeHTML = (html) => {
+  if (!html) return '';
+  return String(html)
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '');
+};
+
 const formatMarkdownToHTML = (text) => {
   if (!text) return '';
   if (typeof text !== 'string') return text;
@@ -2119,6 +2126,7 @@ const App = () => {
       return '';
     }
   });
+  const [showApiKey, setShowApiKey] = useState(false);
   const fallbackKey = typeof atob === 'function' ? atob('QVEuQWI4Uk42SnJHaHVaaFVFTDhhQjJJX21QZ0lDSUVuYmgtVy1UMXZvM0RoYVE2MDRhTHc=') : '';
   const apiKey = (customApiKey && customApiKey.trim() !== 'undefined' ? customApiKey.trim() : '') || (import.meta.env.VITE_GEMINI_API_KEY && import.meta.env.VITE_GEMINI_API_KEY.trim() !== 'undefined' ? import.meta.env.VITE_GEMINI_API_KEY.trim() : '') || fallbackKey;
 
@@ -3439,7 +3447,9 @@ Si es una Unidad Didáctica, responde ÚNICAMENTE con un JSON: { "titulo": "Unid
   };
 
   const handleDownloadCertificate = () => {
-    const certTitle = activeReward ? activeReward.name : "Certificado Oficial";
+    const activeRewardObj = typeof activeReward !== 'undefined' ? activeReward : null;
+    const certTitle = activeRewardObj ? activeRewardObj.name : "Certificado Oficial";
+    const certDays = activeRewardObj ? activeRewardObj.days : 7;
     const certText = `====================================================
                         EDUDOCENT
                CERTIFICADO DE RECONOCIMIENTO
@@ -3449,7 +3459,7 @@ Se otorga el presente certificado a:
 Prof. ${userName || 'Docente de Aula'}
 
 Por su dedicación constante, alcanzando una racha de
-${activeReward ? activeReward.days : 7} días consecutivos planificando clases con IA.
+${certDays} días consecutivos planificando clases con IA.
 
 ¡Felicidades por ser un líder de innovación pedagógica!
 
