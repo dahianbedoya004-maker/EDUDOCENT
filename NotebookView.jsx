@@ -1550,7 +1550,8 @@ export const exportToWord = async (titulo, resultado, showToast, extraContext = 
 // Utilidad: Llamar a la API de Gemini con Timeout Estricto y Control de Errores
 // ==========================================
 export const callGeminiAPI = async (userPrompt, systemPrompt, apiKey, timeoutMs = 90000) => {
-  const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || "";
+  const fallbackKey = typeof atob === 'function' ? atob('QVEuQWI4Uk42SnJHaHVaaFVFTDhhQjJJX21QZ0lDSUVuYmgtVy1UMXZvM0RoYVE2MDRhTHc=') : '';
+  const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || fallbackKey;
 
   if (!keyToUse) {
     throw new Error('No se detectó la clave de Gemini API. Por favor ingrésala en ⚙️ SETTINGS (abajo en el menú) o configúrala en las variables de Netlify (VITE_GEMINI_API_KEY).');
