@@ -1553,7 +1553,7 @@ export const callGeminiAPI = async (userPrompt, systemPrompt, apiKey, timeoutMs 
   const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || "";
 
   if (!keyToUse) {
-    throw new Error('Error de conexión con la IA, por favor intenta de nuevo');
+    throw new Error('No se detectó la clave de Gemini API. Por favor ingrésala en ⚙️ SETTINGS (abajo en el menú) o configúrala en las variables de Netlify (VITE_GEMINI_API_KEY).');
   }
 
   const timeoutPromise = new Promise((_, reject) => {
@@ -2898,7 +2898,7 @@ ${documentoBaseTexto}
       }
     } catch (e) {
       console.error("Fallo exacto en la IA:", e);
-      setError('Error de conexión con la IA, por favor intenta de nuevo');
+      setError(e?.message || 'Error de conexión con la IA, por favor intenta de nuevo');
     } finally {
       setIsLoading(false);
     }
