@@ -49,6 +49,19 @@ const sanitizeHTML = (html) => {
     .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '');
 };
 
+const generarMallaCurricularLocal = (materia, grado, periodo, instrucciones = '') => {
+  return `Malla Curricular Integral: ${materia} - Grado ${grado}° - Periodo ${periodo}
+Estándares MEN: Reconoce y aplica los conceptos fundamentales de ${materia} acordes al grado ${grado}°.
+Derechos Básicos de Aprendizaje (DBA): Desarrolla competencias interpretativas, argumentativas y propositivas en ${materia}.
+Ejes Temáticos:
+1. Fundamentos y conceptos clave de ${materia}.
+2. Aplicaciones prácticas y metodológicas.
+3. Proyecto integrador y resolución de problemas de aula.
+4. Evaluación formativa y autoevaluación.
+Competencias: Razonamiento crítico, comunicación asertiva y aplicación práctica en el entorno escolar.
+Indicadores de Logro: Comprende, argumenta y propone soluciones pedagógicas vinculadas a ${materia}.${instrucciones ? `\nInstrucciones adicionales: ${instrucciones}` : ''}`;
+};
+
 const formatMarkdownToHTML = (text) => {
   if (!text) return '';
   if (typeof text !== 'string') return text;
@@ -3447,9 +3460,7 @@ Si es una Unidad Didáctica, responde ÚNICAMENTE con un JSON: { "titulo": "Unid
   };
 
   const handleDownloadCertificate = () => {
-    const activeRewardObj = typeof activeReward !== 'undefined' ? activeReward : null;
-    const certTitle = activeRewardObj ? activeRewardObj.name : "Certificado Oficial";
-    const certDays = activeRewardObj ? activeRewardObj.days : 7;
+    const certDays = 7;
     const certText = `====================================================
                         EDUDOCENT
                CERTIFICADO DE RECONOCIMIENTO
