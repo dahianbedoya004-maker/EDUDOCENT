@@ -6,6 +6,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, Download, Eye, X, Loader2, Sparkles, BookOpen, Lightbulb, ClipboardList, GraduationCap, Globe, FileText, PlayCircle, Layers, Presentation, Paperclip } from 'lucide-react';
 import pptxgen from "pptxgenjs";
 import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  AlignmentType
+} from "docx";
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import {
   subjectIcons,
   subjectOptions,
   subjectNameToValue,
@@ -226,6 +239,35 @@ const plataformasDiapositivas = [
   { name: 'Google Slides', desc: 'Presentaciones colaborativas en Drive', icon: '🟡', url: 'https://docs.google.com/presentation/', color: 'from-amber-400 to-yellow-500' }
 ];
 
+// Obtener URL de búsqueda directa en cada plataforma de juego según tema y materia
+export const getPlataformaSearchUrl = (platformName = '', topic = '', subject = '') => {
+  const cleanTopic = (topic || '').replace(/^tema\s*\d*\s*:?\s*/gi, '').trim();
+  const query = encodeURIComponent(`${cleanTopic} ${subject || ''}`.trim() || 'educacion');
+  const name = String(platformName || '').toLowerCase();
+  if (name.includes('wordwall')) return `https://wordwall.net/es-cl/community?localeId=1033&query=${query}`;
+  if (name.includes('educaplay')) return `https://es.educaplay.com/recursos-educativos/?q=${query}`;
+  if (name.includes('phet')) return `https://phet.colorado.edu/es/simulations/filter?sort=alpha&view=grid&q=${query}`;
+  if (name.includes('kahoot')) return `https://create.kahoot.it/discover?filter=1&query=${query}`;
+  if (name.includes('quizizz')) return `https://quizizz.com/admin/search/${query}`;
+  if (name.includes('baamboozle')) return `https://www.baamboozle.com/games?search=${query}`;
+  return `https://wordwall.net/es-cl/community?localeId=1033&query=${query}`;
+};
+
+// Determina la app más recomendable según la materia
+export const getRecommendedGameApp = (subject = '') => {
+  const s = String(subject || '').toLowerCase();
+  if (s.includes('mate') || s.includes('físic') || s.includes('químic') || s.includes('cienc') || s.includes('biolog') || s.includes('trigono') || s.includes('álgebr')) {
+    return { name: 'PhET Interactivas', icon: '🔬', desc: 'Simulaciones visuales interactivas para ciencias y matemáticas' };
+  }
+  if (s.includes('social') || s.includes('histori') || s.includes('geograf') || s.includes('filosof') || s.includes('étic')) {
+    return { name: 'Educaplay', icon: '🧩', desc: 'Crucigramas, mapas conceptuales y dinámicas interactivas' };
+  }
+  if (s.includes('inglés') || s.includes('idiom') || s.includes('lengu') || s.includes('español') || s.includes('literat')) {
+    return { name: 'Wordwall', icon: '🎯', desc: 'Ruletas, cuestionarios y sopas de letras gamificadas' };
+  }
+  return { name: 'Kahoot!', icon: '⚡', desc: 'Trivias grupales y desafíos en tiempo real' };
+};
+
 // Opciones de necesidades educativas para el modal de adaptación
 const necesidadesEducativas = [
   { value: 'discapacidad_intelectual_leve', label: 'Discapacidad Intelectual Leve' },
@@ -270,24 +312,57 @@ const getSubjectPlaceholder = (materiaLabel, grado = 6, periodo = 1) => {
 // ==========================================
 // SYSTEM PROMPT AVANZADO UNIFICADO SECCIONADO
 // ==========================================
-const SYSTEM_PROMPT_AVANZADO = `Eres un asistente experto en planificación educativa, DUA y pedagogía. Tu objetivo es ahorrarle tiempo al docente proporcionando material listo para usar.
+const SYSTEM_PROMPT_AVANZADO = `Eres un colega empático y asistente pedagógico experto. Si el docente menciona estrés, carga laboral o conflictos, TIENES ESTRICTAMENTE PROHIBIDO generar rutas didácticas o contenido. Tu único rol es validar sus emociones y brindar apoyo moral en texto conversacional.
+Cuando el docente solicite recursos académicos, tu objetivo es apoyar a los docentes de bachillerato (6° a 11°) y actuar como experto en planificación educativa, DUA y pedagogía. Háblales de tú, como un colega cercano. Valida su esfuerzo, usa un lenguaje conversacional y natural, y evita por completo sonar como un robot, un diccionario o un sistema automatizado.
+IMPORTANTE: Tu respuesta SIEMPRE debe ser un único objeto JSON válido. DENTRO de este objeto JSON, añade SIEMPRE una propiedad adicional llamada 'mensaje_empatico' que contenga tu mensaje conversacional, cálido y de aliento para el profesor.
+
+REGLA INQUEBRANTABLE DE COMILLAS Y JSON (OBLIGATORIA):
+Tienes ESTRICTAMENTE PROHIBIDO utilizar comillas dobles internas (") dentro de tus textos o párrafos explicativos, ya que rompen la estructura del JSON. Usa únicamente comillas simples (') si necesitas citar algo.
+
+REGLA DE FORMATO LIBRE O INSTRUCCIONES ESPECÍFICAS (OBLIGATORIA):
+Evalúa la instrucción adicional del docente. Si pide un formato libre, una carta, o un resumen específico que no sea un plan de periodo, IGNORA la regla de las 13 semanas. En esos casos, responde OBLIGATORIAMENTE con este JSON exacto: { "tipo_respuesta": "libre", "contenido_markdown": "Tu respuesta detallada y organizada aquí, usando formato Markdown." }
+
+REGLA DE 13 SEMANAS Y LÍMITE DE LONGITUD (OBLIGATORIA):
+Cuando se solicite un plan de periodo, la IA DEBE estructurar obligatoriamente una tabla HTML con 13 filas individuales, desglosando los temas progresivamente sin resumir ni agrupar. DEBES generar OBLIGATORIAMENTE 13 temas sueltos y secuenciales, con un párrafo detallado que el profesor debe explicar en voz alta a los alumnos en el array "clases_semanales". Limita la Guía de Explicación de cada semana a un máximo de 50 palabras precisas. Tienes ESTRICTAMENTE PROHIBIDO agrupar semanas, hacer resúmenes agrupados o reducir la cantidad a menos de 13 clases.
+
+ALERTA DE AUDIENCIA (OBLIGATORIO):
+El contenido es para estudiantes de 6° a 11° de bachillerato colombiano. El usuario final es un DOCENTE que debe explicar temas complejos en el aula.
+En la columna "detalle_explicacion" (Guía de Explicación para Voz Alta), tienes ESTRICTAMENTE PROHIBIDO dar resúmenes vagos, genéricos o superficiales.
+DEBES proporcionar un párrafo preciso y concreto (máximo 50 palabras) con:
+- Los DATOS EXACTOS: fechas históricas, fórmulas matemáticas, definiciones precisas, autores, leyes científicas y ejemplos concretos.
+- Utiliza lenguaje pedagógico accesible adaptado al grado solicitado.
+- Incluye al menos 1 PREGUNTA DE VERIFICACIÓN RÁPIDA que el docente pueda hacer oralmente al finalizar.
+- NO uses frases vacías como 'se explica el tema'. En su lugar, ESCRIBE los conceptos reales con comillas simples.
+
+REGLA DE OBEDIENCIA DE FORMATO Y PROFUNDIDAD:
+Tienes ESTRICTAMENTE PROHIBIDO responder con resúmenes genéricos o listas de temas básicos. Debes adaptar la estructura de tu respuesta EXACTAMENTE a lo que el docente pida en sus instrucciones:
+- Si pide un Mapa Conceptual o Cuadro Sinóptico: No generes párrafos. Utiliza jerarquías visuales estrictas con viñetas anidadas (Markdown), usando negritas para los conceptos principales y viñetas secundarias para las ramificaciones y definiciones exactas.
+- Si pide una Guía de Explicación: Tienes prohibido dar solo los objetivos. Debes redactar el contenido teórico a profundidad, incluyendo datos curiosos, fechas, fórmulas o definiciones detalladas que el profesor leerá literalmente a sus alumnos.
+- Si pide un Taller o Quiz: Estructura directamente las preguntas (abiertas o de selección múltiple) enfocadas en el tema específico, sin incluir resúmenes teóricos innecesarios.
 
 ALERTA DE ESTRUCTURA Y FORMATO:
-- Si piden PLAN DE PERIODO: Está PROHIBIDO agrupar temas. Un periodo tiene 13 semanas. DEBES generar exactamente 13 temas individuales y sueltos en el array "clases_semanales".
+- Si piden PLAN DE PERIODO: Está PROHIBIDO agrupar temas. Un periodo tiene 13 semanas. DEBES generar OBLIGATORIAMENTE 13 temas sueltos y secuenciales, con un párrafo detallado (máximo 50 palabras) en el array "clases_semanales".
 - Si piden PRESENTACIÓN CANVA / PPT: Genera en "ideas_presentacion" un esquema estructurado diapositiva por diapositiva (Slide 1: Título, Slide 2: Pregunta generadora, Slide 3: Concepto clave, etc.) listo para copiar a Canva o PowerPoint.
 - Si piden TALLERES: Genera en "contenido_principal" 2 talleres prácticos completos e independientes con instrucciones claras y ejercicios.
-- Si piden JUEGO INTERACTIVO: Genera en "recursos_online" y "contenido_principal" las preguntas y dinámica para un juego tipo Trivia / Wordwall / Kahoot listo para aplicar en clase.
+- En la llave "recursos_online", DEBES generar un arreglo de mínimo 5 a 7 objetos con juegos interactivos o simuladores adecuados al tema. Explora plataformas diversas como Wordwall, Kahoot, Educaplay, Quizizz, Blooket, Cerebriti o PhET. La estructura JSON exacta requerida es:
+"recursos_online": [ { "plataforma": "Nombre de la Plataforma", "url_busqueda": "URL_EXACTA_CON_EL_TEMA" } ]
 - Si piden EXAMEN O QUIZ: Genera formato imprimible limpio con encabezado institucional y clave de respuestas para el docente.
 
 Tu respuesta debe ser un objeto JSON con esta estructura exacta:
 {
   "titulo_periodo": "Título General o del Tema",
   "clases_semanales": [
-    { "semana": 1, "tema_suelto": "Tema de la semana 1", "detalle_explicacion": "Información profunda para que el profe explique" }
+    { "semana": 1, "tema_suelto": "Nombre específico del Tema de la semana 1", "detalle_explicacion": "Párrafo preciso con datos exactos, fórmulas, fechas y pregunta oral de verificación al final (máximo 50 palabras, solo comillas simples)." }
   ],
   "contenido_principal": "Desarrollo detallado del recurso solicitado (Guía, 2 Talleres, Examen evaluativo, Quiz imprimible, Guion de Video o Dinámica de Juego)",
   "ideas_presentacion": "Esquema completo slide por slide para diapositivas en Canva o PowerPoint",
-  "recursos_online": "Juegos interactivos online con botones HTML <a href='...' target='_blank'>🎮 Jugar en línea</a> o trivias listas"
+  "recursos_online": [
+    { "plataforma": "Wordwall", "url_busqueda": "https://wordwall.net/es-cl/community?localeId=1033&query=tema+especifico" },
+    { "plataforma": "Kahoot", "url_busqueda": "https://create.kahoot.it/discover?filter=1&query=tema+especifico" },
+    { "plataforma": "Educaplay", "url_busqueda": "https://es.educaplay.com/recursos-educativos/?q=tema+especifico" },
+    { "plataforma": "Quizizz", "url_busqueda": "https://quizizz.com/admin/search/tema+especifico" },
+    { "plataforma": "PhET", "url_busqueda": "https://phet.colorado.edu/es/simulations/filter?sort=alpha&view=grid&q=tema+especifico" }
+  ]
 }`;
 
 // ==========================================
@@ -373,10 +448,14 @@ const formatMarkdownToHTML = (text) => {
     .replace(/^##### (.*$)/gim, '<h5 style="font-size: 13px; font-weight: 700; color: #0284c7; margin: 12px 0 4px 0;">$1</h5>')
     .replace(/^#### (.*$)/gim, '<h4 style="font-size: 14px; font-weight: 700; color: #1e293b; margin: 14px 0 6px 0;">$1</h4>')
     .replace(/^### (.*$)/gim, '<h3 style="font-size: 15px; font-weight: 800; color: #4338ca; margin: 18px 0 10px 0; border-bottom: 2px solid #e0e7ff; padding-bottom: 6px;">$1</h3>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #0f172a; font-weight: bold;">$1</strong>')
+    .replace(/\[DIAPOSITIVA\s*(\d*|[^\]]*)\]/gi, '<div class="mt-6 mb-3 pt-3 border-t-2 border-amber-300 dark:border-amber-700/60 flex items-center gap-2"><span class="bg-amber-600 text-white text-[11px] font-black px-3 py-1 rounded-lg uppercase tracking-wider shadow-sm">🖥️ Diapositiva $1</span></div>')
+    .replace(/\[TITULO\]\s*(.*)/gi, '<div class="text-sm font-black text-amber-950 dark:text-amber-200 mt-2 mb-1"><span class="bg-amber-200 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 text-[10px] font-black px-2 py-0.5 rounded mr-1.5 uppercase">TÍTULO</span><strong>$1</strong></div>')
+    .replace(/\[CONTENIDO\]\s*(.*)/gi, '<div class="text-xs font-medium text-slate-700 dark:text-slate-200 mt-1 mb-2 leading-relaxed"><span class="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-[10px] font-bold px-2 py-0.5 rounded mr-1.5 uppercase">CONTENIDO</span>$1</div>')
+    .replace(/\[(OBJETIVO|ACTIVIDAD|DINÁMICA|RECURSO)\]\s*(.*)/gi, '<div class="text-xs font-medium text-slate-700 dark:text-slate-200 mt-1 mb-2 leading-relaxed"><span class="bg-indigo-100 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200 text-[10px] font-bold px-2 py-0.5 rounded mr-1.5 uppercase">$1</span>$2</div>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: 800;">$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid #6366f1; background-color: #f8fafc; padding: 10px 14px; margin: 12px 0; border-radius: 0 10px 10px 0; font-style: italic; color: #334155;">$1</blockquote>')
-    .replace(/^[*-] (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: #334155;">$1</li>')
+    .replace(/^[*-] (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: inherit;">$1</li>')
     .replace(/\[ \]/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 4px; vertical-align: middle; margin-right: 6px;"></span>')
     .replace(/\(   \)/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 50%; vertical-align: middle; margin-right: 6px;"></span>')
     .replace(/\n\n+/g, '<div style="height: 12px;"></div>')
@@ -390,7 +469,24 @@ const formatMarkdownToHTML = (text) => {
 // ==========================================
 const getSystemPromptForResource = (necesidad, instruccionesExtra = '') => {
   const baseInstructions = `Eres un asistente experto en planificación educativa, DUA y pedagogía. Tu objetivo es ahorrarle tiempo al docente proporcionando material listo para usar.
-REGLA DE ORO: Si el usuario incluye "Instrucciones" específicas (ej. cantidad de talleres, formato, enfoques particulares), DEBES obedecer estrictamente lo que pide el usuario por encima de cualquier regla por defecto de cantidad.
+REGLA ESTRICTA DE CLASIFICACIÓN DE INTENCIÓN (OBLIGATORIA): Antes de responder, analiza la intención. Si el docente menciona un problema personal, conflictos con jefes o estrés, TIENES PROHIBIDO generar rutas didácticas o contenido. Tu rol es brindar apoyo emocional como un colega.
+REGLA INQUEBRANTABLE DE COMILLAS Y JSON (OBLIGATORIA): Tienes ESTRICTAMENTE PROHIBIDO utilizar comillas dobles internas (") dentro de tus textos o párrafos explicativos, ya que rompen la estructura del JSON. Usa únicamente comillas simples (') si necesitas citar algo.
+
+🚨 REGLA SUPREMA DE PRIORIDAD DEL DOCENTE (OBLIGATORIA Y TOTAL):
+Las instrucciones personalizadas que el docente escriba TIENEN PRIORIDAD ABSOLUTA sobre cualquier configuración por defecto.
+- Si el docente solicita un número específico de preguntas (por ejemplo: "5 preguntas de selección múltiple y 1 pregunta abierta"), DEBES GENERAR EXACTAMENTE esa cantidad y tipos de preguntas.
+- Si pide selección múltiple, incluye cada pregunta numerada con opciones claras (A, B, C, D).
+- Si pide preguntas abiertas, incluye la consigna reflexiva y suficiente espacio para que el estudiante responda.
+- NUNCA omitas ni resumas las preguntas solicitadas; entrégalas completas, detalladas y listas para el aula.
+
+REGLA DE FORMATO LIBRE (OBLIGATORIA): Si el docente pide expresamente un texto libre, carta o resumen libre, responde con este JSON: { "tipo_respuesta": "libre", "contenido_markdown": "Tu respuesta aquí en Markdown." }
+REGLA DE 13 CLASES Y LÍMITE: Solo si se solicita específicamente un plan general de periodo/temario de 13 semanas, genera el array "clases_semanales" con 13 semanas individuales.
+
+REGLA DE OBEDIENCIA DE FORMATO Y PROFUNDIDAD:
+- Si pide un Taller o Quiz: Estructura directamente las preguntas (abiertas o de selección múltiple) enfocadas en el tema específico y según las instrucciones del docente.
+- Si pide un Mapa Conceptual o Cuadro Sinóptico: Utiliza tablas HTML o jerarquías visuales estrictas.
+- Si pide una Guía de Explicación: Redacta el contenido teórico a profundidad con ejemplos y diálogos para el aula.
+
 Responde ÚNICAMENTE con un objeto JSON válido. No incluyas explicaciones de introducción o cierre fuera del JSON.`;
 
   const necesidadClean = ((necesidad || '') + ' ' + (instruccionesExtra || '')).toLowerCase();
@@ -400,16 +496,39 @@ Responde ÚNICAMENTE con un objeto JSON válido. No incluyas explicaciones de in
 Tu única tarea es diseñar una estructura de diapositivas slide por slide (para PowerPoint o Canva) sobre el tema solicitado.
 Tu respuesta debe ser un objeto JSON con esta estructura exacta:
 {
-  "titulo": "Estructura de Diapositivas Canva",
+  "titulo": "Estructura de Diapositivas Canva / PowerPoint",
   "ideas_presentacion": "Genera el contenido de las diapositivas usando ESTRICTAMENTE este formato para CADA diapositiva, sin usar HTML:\n[DIAPOSITIVA 1]\n[TITULO] Escribe aquí el título corto\n[CONTENIDO] Escribe aquí el texto explicativo de la diapositiva (viñetas o párrafos cortos).\n\n[DIAPOSITIVA 2]\n[TITULO] ...\n[CONTENIDO] ...\n\n(Debes generar de 5 a 8 diapositivas siguiendo estrictamente este formato con las etiquetas en corchetes).",
   "guia_docente": "Breve indicación de cómo dirigir esta presentación de forma interactiva."
 }`;
   }
 
+  if (necesidadClean.includes('quiz') || necesidadClean.includes('quizzes') || necesidadClean.includes('cuestionario')) {
+    return `${baseInstructions}
+Tu única tarea es diseñar un Quiz / Cuestionario Evaluativo formal listo para entregar al estudiante y guardarse en Word.
+Usa etiquetas HTML limpias (<h1>, <h2>, <p>, <b>, <br>, <ol>, <ul>, <li>).
+Encabezado obligatorio en la parte superior:
+<b>Nombre del Estudiante:</b> ___________________________ <b>Fecha:</b> ____________ <b>Nota:</b> _____<br><br>
+
+INSTRUCCIONES DE PREGUNTAS (OBLIGATORIO):
+- SI EL DOCENTE INDICÓ INSTRUCCIONES ESPECÍFICAS (ej: "5 preguntas de selección múltiple y 1 pregunta abierta", o cualquier otra indicación), DEBES CUMPLIRLAS AL 100% GENERANDO TODAS Y CADA UNA DE LAS PREGUNTAS COMPLETAS.
+- Para preguntas de selección múltiple: incluye el enunciado numerado y las opciones (A, B, C, D) en renglones separados.
+- Para preguntas abiertas: incluye el enunciado claro y un espacio con líneas punteadas o espacio en blanco para que el alumno redacte.
+- Si el docente no especificó cantidad, genera por defecto 5 preguntas de selección múltiple con opciones (A, B, C, D).
+
+Tu respuesta debe ser un objeto JSON con esta estructura exacta:
+{
+  "titulo": "Quiz Evaluativo de Clase",
+  "contenido_principal": "El código HTML completo y estructurado del quiz, con encabezado formal de estudiante y TODAS las preguntas solicitadas completamente desarrolladas y listas para imprimir.",
+  "guia_docente": "Clave detallada de respuestas correctas comentadas para el docente (ej: 1. A, 2. B...) y rúbrica para preguntas abiertas."
+}`;
+  }
+
   if (necesidadClean.includes('taller') || necesidadClean.includes('talleres')) {
     return `${baseInstructions}
-Tu única tarea es diseñar los talleres prácticos solicitados. Por defecto diseña DOS (2) talleres, pero si el usuario te pidió expresamente otra cantidad (ej. solo 1), genera EXACTAMENTE la cantidad pedida.
-Usa etiquetas HTML (<h1>, <h2>, <p>, <b>, <br>, <ul>, <hr>) para darle formato formal de hoja de trabajo.
+Tu única tarea es diseñar los talleres prácticos solicitados.
+Si el usuario pidió una cantidad o formato específico en sus instrucciones (ej: 1 taller, 3 talleres, o tipos específicos de actividades), GENERA EXACTAMENTE LO SOLICITADO.
+Por defecto diseña DOS (2) talleres prácticos completos.
+Usa etiquetas HTML (<h1>, <h2>, <p>, <b>, <br>, <ul>, <ol>, <li>, <hr>) para darle formato formal de hoja de trabajo para estudiantes.
 Cada taller DEBE tener en la parte superior el siguiente encabezado exacto:
 <b>Nombre:</b> ___________________________ <b>Fecha:</b> _________________<br><br>
 
@@ -419,7 +538,7 @@ Taller 2: Ejercicios aplicados o contextualizados (nivel aplicado).
 Tu respuesta debe ser un objeto JSON con esta estructura exacta:
 {
   "titulo": "Talleres Prácticos Evaluativos",
-  "contenido_principal": "El código HTML completo de ambos talleres. Incluye el encabezado de Nombre/Fecha en cada taller. Deja espacios generosos (usando múltiples <br>) entre preguntas para que el estudiante pueda escribir su respuesta.",
+  "contenido_principal": "El código HTML completo de los talleres. Incluye el encabezado de Nombre/Fecha en cada taller. Deja espacios generosos (usando múltiples <br>) entre preguntas para que el estudiante pueda escribir su respuesta.",
   "guia_docente": "Criterios rápidos de evaluación y clave de respuestas correctas para el profesor."
 }`;
   }
@@ -427,37 +546,22 @@ Tu respuesta debe ser un objeto JSON con esta estructura exacta:
   if (necesidadClean.includes('examen') || necesidadClean.includes('evaluación')) {
     return `${baseInstructions}
 Tu única tarea es diseñar un Examen de Unidad estructurado formalmente y listo para imprimir en Word.
-Usa etiquetas HTML (<h1>, <p>, <b>, <br>, <ol>, <li>) para darle formato de hoja de examen real.
+Usa etiquetas HTML (<h1>, <h2>, <p>, <b>, <br>, <ol>, <ul>, <li>) para darle formato de hoja de examen real.
 El examen DEBE tener en la parte superior el siguiente encabezado exacto:
 <b>Centro Educativo:</b> ___________________________<br>
 <b>Nombre del Estudiante:</b> ___________________________<br>
 <b>Fecha:</b> _________________ <b>Grado:</b> _________<br><br>
 
-Luego, incluye por defecto (salvo que el usuario especifique otra cantidad):
-1. 5 preguntas de selección múltiple tipo pruebas Saber (A, B, C, D) usando listas y saltos de línea legibles.
-2. 2 preguntas abiertas de desarrollo reflexivo con suficiente espacio (múltiples <br>) para responder a mano.
+Si el docente dio instrucciones sobre cantidad o tipo de preguntas, SÍGUELAS EXACTAMENTE.
+Por defecto:
+1. 5 preguntas de selección múltiple tipo pruebas Saber (A, B, C, D).
+2. 2 preguntas abiertas de desarrollo reflexivo con suficiente espacio para responder a mano.
 
 Tu respuesta debe ser un objeto JSON con esta estructura exacta:
 {
   "titulo": "Examen de Unidad Imprimible",
-  "contenido_principal": "El código HTML completo del examen, incluyendo el encabezado de Nombre/Fecha y las preguntas estructuradas, diseñado de forma limpia para ser impreso.",
+  "contenido_principal": "El código HTML completo del examen, incluyendo el encabezado y todas las preguntas estructuradas, diseñado de forma limpia para ser impreso.",
   "guia_docente": "Clave de respuestas correctas (A, B, C, D) y criterios de evaluación para las preguntas abiertas."
-}`;
-  }
-
-  if (necesidadClean.includes('quiz')) {
-    return `${baseInstructions}
-Tu única tarea es diseñar un Quiz Rápido Imprimible estructurado formalmente para guardarse en Word.
-Usa HTML básico (<h1>, <b>, <br>, <ol>).
-DEBE tener este encabezado:
-<b>Nombre:</b> _______________________ <b>Nota:</b> _____<br><br>
-
-Debe incluir por defecto 4 preguntas sencillas de comprobar saberes básicos (o exactamente la cantidad que el usuario especifique en sus Instrucciones).
-Tu respuesta debe ser un objeto JSON con esta estructura exacta:
-{
-  "titulo": "Quiz Diagnóstico Corto",
-  "contenido_principal": "El código HTML completo del quiz con el encabezado formal y las 4 preguntas bien espaciadas listas para imprimir.",
-  "guia_docente": "Clave de respuestas para calificación rápida."
 }`;
   }
 
@@ -477,9 +581,11 @@ Tu respuesta debe ser un objeto JSON con esta estructura exacta:
     return `${baseInstructions}
 Tu única tarea es redactar el Guion de un Video Explicativo corto sobre el tema solicitado.
 Debe estructurarse con gancho inicial, desarrollo conceptual y llamada a la acción.
+En la llave "busqueda_youtube", construye el enlace exacto de YouTube buscando el concepto específico.
 Tu respuesta debe ser un objeto JSON con esta estructura exacta:
 {
   "titulo": "Guion Didáctico para Video",
+  "busqueda_youtube": "https://www.youtube.com/results?search_query=tema+especifico+explicacion",
   "contenido_principal": "Guion detallado de 2 columnas indicando lo que se muestra visualmente en pantalla y el audio/locución correspondiente que debe decir el docente.",
   "guia_docente": "Consejos rápidos de grabación, tono de voz y plataformas educativas sugeridas."
 }`;
@@ -487,13 +593,19 @@ Tu respuesta debe ser un objeto JSON con esta estructura exacta:
 
   if (necesidadClean.includes('juego')) {
     return `${baseInstructions}
-Tu única tarea es diseñar la dinámica y preguntas para un Juego Educativo Interactivo listo para el aula sobre el tema solicitado (tipo trivia o juego cooperativo).
+Tu única tarea es diseñar la dinámica y preguntas para un Juego Educativo Interactivo listo para el aula sobre el tema solicitado.
 Debe detallar las preguntas, respuestas y dinámica de juego.
 Tu respuesta debe ser un objeto JSON con esta estructura exacta:
 {
   "titulo": "Juego Interactivo para Clase",
   "contenido_principal": "Dinámica detallada de cómo jugar en el aula más 5 preguntas de trivia con sus opciones y respuestas para interactuar con los estudiantes.",
-  "recursos_online": "Juegos en línea recomendados con botones HTML <a href='https://wordwall.net/es' target='_blank'>🎮 Jugar en Wordwall</a>",
+  "recursos_online": [
+    { "plataforma": "Wordwall", "url_busqueda": "https://wordwall.net/es-cl/community?localeId=1033&query=tema+especifico" },
+    { "plataforma": "Kahoot", "url_busqueda": "https://create.kahoot.it/discover?filter=1&query=tema+especifico" },
+    { "plataforma": "Educaplay", "url_busqueda": "https://es.educaplay.com/recursos-educativos/?q=tema+especifico" },
+    { "plataforma": "Quizizz", "url_busqueda": "https://quizizz.com/admin/search/tema+especifico" },
+    { "plataforma": "PhET", "url_busqueda": "https://phet.colorado.edu/es/simulations/filter?sort=alpha&view=grid&q=tema+especifico" }
+  ],
   "guia_docente": "Instrucciones paso a paso de cómo organizar a los alumnos y otorgar puntos."
 }`;
   }
@@ -506,610 +618,992 @@ REGLAS ESTRICTAS DE FORMATO (Para que se vea excelente en Word):
 - Cuadro Sinóptico: Usa una tabla HTML con la primera columna agrupada (rowspan) para simular la jerarquía/llaves.
 - Línea de Tiempo: Usa una tabla HTML de 2 columnas (Fecha/Época y Evento).
 - Cuadro Comparativo / Venn: Usa una tabla HTML comparando los aspectos.
-- Diagrama de Flujo: Usa bloques <pre> con arte ASCII estilizado (usando corchetes [ ] y flechas ↓ →).
 Tu respuesta debe ser un objeto JSON con esta estructura exacta:
 {
   "titulo": "Organizador Gráfico del Tema",
   "contenido_principal": "El código HTML completo con la representación visual estructurada.",
   "guia_docente": "Sugerencias de cómo utilizar este recurso visual en la clase."
+} `;
+  }
+
+  if (necesidadClean.includes('dua') || necesidadClean.includes('inclusi') || necesidadClean.includes('adaptaci') || necesidadClean.includes('tip')) {
+    return `${baseInstructions}
+Tu única tarea es generar la Adaptación Curricular DUA y Tips de Inclusión para el aula sobre el tema solicitado.
+Usa etiquetas HTML (<p>, <b>, <br>, <ul>, <li>, <h3>, <table>) para que sea un informe pedagógico profesional listo para guardar en Word.
+Estructura la respuesta en 4 apartados prácticos:
+1. Múltiples formas de representación (visual, auditiva, kinestésica).
+2. Múltiples formas de acción y expresión (opciones de respuesta y evaluación).
+3. Múltiples formas de implicación (fomento de la motivación y curiosidad).
+4. Ajustes razonables y apoyos específicos (TDAH, TEA y dificultades de lectoescritura).
+Tu respuesta debe ser un objeto JSON con esta estructura exacta:
+{
+  "titulo": "Adaptación Curricular DUA y Tips de Inclusión",
+  "contenido_principal": "El código HTML estructurado y detallado con todas las adaptaciones y recomendaciones para el aula, listo para imprimir y aplicar.",
+  "guia_docente": "Recomendaciones clave de acompañamiento emocional y clima de aula positivo."
 }`;
   }
 
-  // Si se pide el plan general de 13 clases
   return SYSTEM_PROMPT_AVANZADO;
 };
 
 // ==========================================
-// Utilidad: Exportar a documento Word (.doc)
+// FUNCIÓN ASÍNCRONA: Descargar PowerPoint (.pptx) usando PptxGenJS
 // ==========================================
-const exportToWord = (titulo, resultado, showToast) => {
-  const docTitle = (typeof resultado === 'object' && (resultado?.titulo_periodo || resultado?.titulo_plan || resultado?.titulo)) || titulo || "Recurso_EDUDOCENT";
-
-  let bodyHTML = `
-    <div style="font-family: Arial, sans-serif; padding: 10px;">
-      <div style="background-color: #4f46e5; color: white; padding: 14px 20px; border-radius: 8px; margin-bottom: 20px;">
-        <h1 style="margin: 0; font-size: 20px;">EDUDOCENT — Material Educativo</h1>
-        <p style="margin: 4px 0 0 0; font-size: 11px; opacity: 0.9;">Generado automáticamente para el docente</p>
-      </div>
-      <h2 style="color: #1e293b; font-size: 16px; border-bottom: 2px solid #6366f1; padding-bottom: 6px;">${docTitle}</h2>
-  `;
-
-  if (typeof resultado === 'string') {
-    bodyHTML += `<div style="margin-top: 15px;">${formatMarkdownToHTML(resultado)}</div>`;
-  } else if (resultado) {
-    if (resultado._texto_libre) {
-      bodyHTML += `<div style="margin-top: 15px;">${formatMarkdownToHTML(resultado._texto_libre)}</div>`;
-    }
-    if (Array.isArray(resultado.clases_semanales) && resultado.clases_semanales.length > 0) {
-      let tableRows = resultado.clases_semanales.map((c, idx) => `
-        <tr>
-          <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; color: #4f46e5;">Semana ${c.semana || idx + 1}</td>
-          <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold;">${c.tema_suelto || ''}</td>
-          <td style="padding: 8px; border: 1px solid #cbd5e1;">${formatMarkdownToHTML(c.detalle_explicacion || '')}</td>
-        </tr>
-      `).join('');
-
-      bodyHTML += `
-        <div style="margin-top: 20px;">
-          <h3 style="color: #4f46e5; font-size: 14px;">1. Plan de 13 Clases Semanales (13 Temas Sueltos)</h3>
-          <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px;">
-            <thead>
-              <tr style="background-color: #4f46e5; color: white;">
-                <th style="padding: 8px; border: 1px solid #4338ca; width: 80px;">Semana</th>
-                <th style="padding: 8px; border: 1px solid #4338ca; width: 30%;">Tema Específico</th>
-                <th style="padding: 8px; border: 1px solid #4338ca;">Guía de Explicación (Voz Alta)</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
-    if (resultado.plan_13_clases) {
-      bodyHTML += `
-        <div style="margin-top: 20px;">
-          <h3 style="color: #4f46e5; font-size: 14px;">1. Plan de 13 Clases Independientes</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.plan_13_clases)}</div>
-        </div>
-      `;
-    }
-    if (resultado.contenido_principal) {
-      bodyHTML += `
-        <div style="margin-top: 20px;">
-          <h3 style="color: #4f46e5; font-size: 14px;">Contenido Principal / Recurso</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.contenido_principal)}</div>
-        </div>
-      `;
-    }
-    if (resultado.ideas_presentacion || resultado.estructura_presentacion) {
-      bodyHTML += `
-        <div style="margin-top: 20px;">
-          <h3 style="color: #d97706; font-size: 14px;">2. Estructura para Presentaciones / Diapositivas (PowerPoint / Canva)</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.ideas_presentacion || resultado.estructura_presentacion)}</div>
-        </div>
-      `;
-    }
-    if (resultado.recursos_online) {
-      bodyHTML += `
-        <div style="margin-top: 20px;">
-          <h3 style="color: #0284c7; font-size: 14px;">3. Recursos Online y Juegos Recomendados</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.recursos_online)}</div>
-        </div>
-      `;
-    }
-    if (resultado.adaptacion_inclusiva) {
-      bodyHTML += `
-        <div style="margin-top: 20px;">
-          <h3 style="color: #7c3aed; font-size: 14px;">4. Adaptación Inclusiva (PIAR / DUA)</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.adaptacion_inclusiva)}</div>
-        </div>
-      `;
-    }
-    if (resultado.guia_docente) {
-      bodyHTML += `
-        <div style="margin-top: 20px;">
-          <h3 style="color: #059669; font-size: 14px;">5. Guía para el Docente</h3>
-          <div style="font-size: 12px; line-height: 1.6;">${formatMarkdownToHTML(resultado.guia_docente)}</div>
-        </div>
-      `;
-    }
-  }
-
-  bodyHTML += `
-      <hr style="border: none; border-top: 1px dashed #cbd5e1; margin-top: 30px;" />
-      <p style="font-size: 10px; color: #94a3b8; text-align: center;">EDUDOCENT — Copiloto Docente e Inteligencia Artificial Educativa</p>
-    </div>
-  `;
-
+export const descargarPPTX = async (titulo, resultado, showToast) => {
   try {
-    const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' "+
-      "xmlns:w='urn:schemas-microsoft-com:office:word' "+
-      "xmlns='http://www.w3.org/TR/REC-html40'>"+
-      "<head><meta charset='utf-8'><title>Export Word</title></head><body>";
-    const footer = "</body></html>";
-    const sourceHTML = header + bodyHTML + footer;
+    const docTitle = (typeof resultado === 'object' && (resultado?.titulo_periodo || resultado?.titulo_plan || resultado?.titulo)) || titulo || "Presentacion_EDUDOCENT";
+    
+    // Obtener el constructor de forma segura para Vite y bundles ES
+    const PptxConstructor = typeof pptxgen === 'function' ? pptxgen : (pptxgen?.default || pptxgen);
+    if (!PptxConstructor) {
+      throw new Error("Librería PptxGenJS no disponible");
+    }
+    const pres = new PptxConstructor();
+    pres.author = 'EDUDOCENT AI';
+    pres.company = 'EDUDOCENT';
+    pres.title = docTitle;
+    pres.layout = 'LAYOUT_16x9';
 
-    const blob = new Blob(['\ufeff', sourceHTML], {
-      type: 'application/msword'
-    });
+    // Slide 1: Portada Principal
+    const titleSlide = pres.addSlide();
+    titleSlide.background = { color: "0F172A" };
+    titleSlide.addText("EDUDOCENT AI", { x: 0.5, y: 1.0, w: '90%', h: 0.5, fontSize: 14, bold: true, color: "6366F1", align: "center" });
+    titleSlide.addText(docTitle, { x: 0.5, y: 1.7, w: '90%', h: 1.5, fontSize: 28, bold: true, color: "FFFFFF", align: "center" });
+    titleSlide.addText("Recurso pedagógico estructurado para el aula", { x: 0.5, y: 3.4, w: '90%', h: 0.5, fontSize: 16, color: "94A3B8", align: "center" });
 
+    // === ESTRATEGIA 1: Si viene en el formato de 13 clases semanales en JSON ===
+    if (resultado && Array.isArray(resultado.clases_semanales) && resultado.clases_semanales.length > 0) {
+      resultado.clases_semanales.forEach((clase, idx) => {
+        const slide = pres.addSlide();
+        slide.background = { color: "FFFFFF" };
+
+        slide.addText(`Clase / Semana ${clase.semana || idx + 1}`, {
+          x: 0.5, y: 0.4, w: 2.5, h: 0.45,
+          fontSize: 12, bold: true, color: "FFFFFF",
+          fill: { color: "4F46E5" }, align: "center"
+        });
+
+        slide.addText(clase.tema_unico_y_diferente || clase.tema_suelto || `Tema ${idx + 1}`, {
+          x: 0.5, y: 1.0, w: '90%', h: 0.7,
+          fontSize: 22, bold: true, color: "0F172A"
+        });
+
+        slide.addShape(pres.ShapeType.line, {
+          x: 0.5, y: 1.7, w: '90%', h: 0,
+          line: { color: "E2E8F0", width: 2 }
+        });
+
+        const detalle = (clase.detalle_explicacion || '').replace(/<[^>]*>?/gm, '').trim();
+        slide.addText(detalle, {
+          x: 0.5, y: 1.9, w: '90%', h: 3.2,
+          fontSize: 14, color: "334155", valign: 'top',
+          lineSpacing: 20
+        });
+
+        slide.addText('EDUDOCENT AI — Chispa Pedagógica', {
+          x: 0.5, y: 5.2, w: '50%', h: 0.3,
+          fontSize: 10, color: "94A3B8"
+        });
+      });
+    }
+    // === ESTRATEGIA 2: Si viene con tags de diapositivas o texto estructurado ===
+    else {
+      const rawText = (typeof resultado === 'string'
+        ? resultado
+        : (resultado?.ideas_presentacion || resultado?.estructura_presentacion || resultado?.presentation || resultado?.contenido_principal || resultado?.plan_13_clases || resultado?._texto_libre || ''));
+
+      let slideBlocks = [];
+      if (/\[DIAPOSITIVA\s*\d*\]/i.test(rawText)) {
+        slideBlocks = rawText.split(/\[DIAPOSITIVA\s*\d*\]/i).filter(b => b.trim().length > 0);
+      } else if (/(?:###|\*\*)\s*(?:Diapositiva|Slide|Lámina)\s*\d+/i.test(rawText)) {
+        slideBlocks = rawText.split(/(?=(?:###|\*\*)\s*(?:Diapositiva|Slide|Lámina)\s*\d+)/i).filter(b => b.trim().length > 0);
+      } else if (/###\s+/i.test(rawText)) {
+        slideBlocks = rawText.split(/(?=###\s+)/i).filter(b => b.trim().length > 0);
+      } else if (rawText.includes('<h2') || rawText.includes('<h3')) {
+        slideBlocks = rawText.split(/(?=<h[23])/i).filter(b => b.trim().length > 0);
+      } else {
+        slideBlocks = rawText.split(/\n\n+/).filter(b => b.trim().length > 20);
+      }
+
+      if (slideBlocks.length > 0) {
+        slideBlocks.forEach((block, idx) => {
+          const slide = pres.addSlide();
+          slide.background = { color: "FFFFFF" };
+
+          const cleanBlock = block.replace(/<[^>]*>?/gm, '').trim();
+          let slideTitle = `Diapositiva ${idx + 1}`;
+          let slideContent = cleanBlock;
+
+          if (/\[TITULO\]/i.test(cleanBlock)) {
+            const titleMatch = cleanBlock.match(/\[TITULO\]([\s\S]*?)\[CONTENIDO\]/i);
+            const contentMatch = cleanBlock.match(/\[CONTENIDO\]([\s\S]*)/i);
+            if (titleMatch) slideTitle = titleMatch[1].trim();
+            if (contentMatch) slideContent = contentMatch[1].trim();
+          } else {
+            const lines = cleanBlock.split('\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length > 0 && (lines[0].startsWith('#') || lines[0].startsWith('**') || lines[0].length < 80)) {
+              slideTitle = lines[0].replace(/^[#*•\-\s]+/, '').replace(/[*#]+$/, '').trim();
+              slideContent = lines.slice(1).join('\n');
+            }
+          }
+
+          slide.addText(slideTitle || `Diapositiva ${idx + 1}`, {
+            x: 0.5, y: 0.5, w: '90%', h: 0.8,
+            fontSize: 22, bold: true, color: "0D9488"
+          });
+
+          slide.addShape(pres.ShapeType.line, {
+            x: 0.5, y: 1.4, w: '90%', h: 0,
+            line: { color: "E2E8F0", width: 2 }
+          });
+
+          slide.addText(slideContent.trim() || cleanBlock, {
+            x: 0.5, y: 1.7, w: '90%', h: 3.4,
+            fontSize: 14, color: "334155", valign: 'top',
+            lineSpacing: 20
+          });
+
+          slide.addText('EDUDOCENT AI — Chispa Pedagógica', {
+            x: 0.5, y: 5.2, w: '50%', h: 0.3,
+            fontSize: 10, color: "94A3B8"
+          });
+        });
+      }
+    }
+
+    const safeFileName = `${docTitle.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase()}.pptx`;
+    
+    // Generar como ArrayBuffer -> Blob nativo para máxima compatibilidad con navegadores
+    const data = await pres.write({ outputType: 'arraybuffer' });
+    const blob = new Blob([data], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${docTitle.replace(/[^a-zA-Z0-9_-]/g, '_')}.doc`;
+    a.download = safeFileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    if (showToast) showToast('📄 Documento exportado a Word (.doc) con éxito');
-  } catch {
-    if (showToast) showToast('⚠️ Error al exportar documento');
+    if (showToast) showToast('Éxito', 'Presentación PowerPoint (.pptx) descargada correctamente', 'success');
+  } catch (error) {
+    console.error("Error generando PowerPoint:", error);
+    if (showToast) showToast('Error', 'No se pudo generar el PowerPoint: ' + (error?.message || ''), 'error');
   }
 };
 
 // ==========================================
-// Utilidad: Llamar a la API de Gemini con respaldo inteligente
 // ==========================================
-const generateFallbackNotebookAIResponse = (userPrompt, systemPrompt) => {
-  const isEnglish = (userPrompt || '').toLowerCase().includes('english') || (systemPrompt || '').toLowerCase().includes('english');
-
-  const topicMatch = (userPrompt || '').match(/tema[^:|]*[:|]\s*([^|]+)/i) || (userPrompt || '').match(/materia[^:|]*[:|]\s*([^|]+)/i);
-  const topicName = topicMatch ? topicMatch[1].trim() : 'Unidad Temática y Contenidos del Grado';
-
-  const necesidadMatch = (userPrompt || '').match(/necesidad[^:|]*[:|]\s*([^|]+)/i);
-  const nStr = necesidadMatch ? necesidadMatch[1].trim().toLowerCase() : (userPrompt + ' ' + systemPrompt).toLowerCase();
-
-  // 5. TALLERES PRÁCTICOS / GUÍAS DE EJERCICIOS
-  if (nStr.includes('taller') || nStr.includes('ejercicio') || nStr.includes('worksheet') || nStr.includes('práctica')) {
-    if (isEnglish) {
-      return `### 📝 Practical Workshop No. 1: Application Exercises
-**Topic:** ${topicName} | **Student Name:** ____________________ | **Date:** ________
-
-#### 🔹 Activity 1: Case Study Analysis
-> *Instruction:* Read the case below carefully and answer the questions.
-
-*Case Scenario:* A practical situation where students must apply the core concepts of **${topicName}**.
-
-1. What is the key concept required to solve this scenario?
-   __________________________________________________________________________________
-2. List 2 step-by-step actions to complete the task successfully:
-   - Step A: ________________________________________________________________________
-   - Step B: ________________________________________________________________________
-
----
-
-#### 🔹 Activity 2: Matching Column Exercise
-> *Instruction:* Match each term on the left with its corresponding description on the right.
-
-1. Core Concept of ${topicName}        ---------> (  ) Practical classroom application.
-2. Main Rule / Procedure            ---------> (  ) Fundamental definition.
-3. Expected Learning Outcome        ---------> (  ) Goal achieved after completing the exercise.
-
----
-
-### 📝 Practical Workshop No. 2: Creative Challenge
-**Topic:** ${topicName} | **Partner / Group:** ____________________
-
-#### 🚀 Team Challenge:
-Create your own original example demonstrating how **${topicName}** is used in everyday life.
-
-1. **Project Title:** ________________________________________________________
-2. **Short Description:** __________________________________________________
-3. **Diagram / Sketch Box:**
-   [ Draw or create your concept map in this box ]
-
----
-#### 🔑 Formative UDL Check
-- [ ] I understood the main concept of the workshop.
-- [ ] I completed the tasks independently or with teacher support.
-`;
-    }
-
-    return `### 📝 Taller Práctico No. 1: Ejercicios de Aplicación Directa
-**Tema:** ${topicName} | **Estudiante:** ____________________ | **Fecha:** ________
-
-#### 🔹 Actividad 1: Análisis de Caso Práctico
-> *Instrucción:* Lee atentamente la siguiente situación y responde las preguntas con claridad.
-
-*Caso:* En una jornada escolar, se presenta un escenario donde los estudiantes deben aplicar los principios fundamentales de **${topicName}**.
-
-1. ¿Cuál es el concepto clave que permite solucionar este escenario?
-   __________________________________________________________________________________
-2. Explica 2 pasos indispensables para ejecutar la solución de forma correcta:
-   - Paso A: ________________________________________________________________________
-   - Paso B: ________________________________________________________________________
-
----
-
-#### 🔹 Actividad 2: Emparejamiento de Términos
-> *Instrucción:* Relaciona cada concepto de la columna izquierda con su aplicación correspondiente en la columna derecha escribiendo el número correcto.
-
-1. Concepto Central de ${topicName}    ---------> (  ) Aplicación práctica en el salón de clase.
-2. Procedimiento o Regla Principal   ---------> (  ) Definición de base para el entendimiento del tema.
-3. Resultado o Conclusión Esperada    ---------> (  ) Meta alcanzada tras el desarrollo de los ejercicios.
-
----
-
-### 📝 Taller Práctico No. 2: Desafío de Creación y Producción
-**Tema:** ${topicName} | **Grupo / Pareja:** ____________________
-
-#### 🚀 Reto Colaborativo:
-Diseña una propuesta o ejemplo propio donde demuestres cómo utilizas **${topicName}** en tu entorno cotidiano o escolar.
-
-1. **Título de tu Ejemplo:** __________________________________________________
-2. **Descripción Corta:** ____________________________________________________
-3. **Representación Gráfica o Esquema:**
-   [ Dibuja o realiza un diagrama en este espacio ]
-
----
-#### 🔑 Criterio de Autoevaluación Formativa (DUA)
-- [ ] Logré comprender el concepto principal del taller.
-- [ ] Completé las actividades con autonomía o el apoyo del docente.
-`;
-  }
-
-  // 1. PRESENTACIÓN CANVA / PPT (DIAPOSITIVAS)
-  if (nStr.includes('presentación') || nStr.includes('ppt') || nStr.includes('diapositiva') || nStr.includes('canva') || nStr.includes('slide')) {
-    if (isEnglish) {
-      return `### 🖥️ Slide Structure for Canva / PowerPoint Presentation
-**Topic:** ${topicName}
-
----
-#### 📄 Slide 1: Title & Overview
-- **Main Title:** ${topicName}
-- **Subtitle:** Interactive Classroom Guide & Core Concepts
-- **Visual Prompt (Canva):** High-contrast educational vector art with key icons.
-- **Speaker Notes:** Welcome students, present daily learning goal, and initiate 2-min warmup question.
-
----
-#### 📄 Slide 2: Learning Objectives & Goals
-- **What will we master today?:**
-  1. Key definitions and historical/conceptual context of ${topicName}.
-  2. Practical step-by-step examples and real-world relevance.
-  3. Collaborative pair exercise & quick check-for-understanding.
-- **Speaker Notes:** Explain objectives in accessible language for all student profiles.
-
----
-#### 📄 Slide 3: Core Concept Breakdown
-- **Key Definition:** Main theoretical and practical framework.
-- **Visual Layout:** 3-step structured infographic.
-- **Speaker Notes:** Pause for diagnostic questions and quick student feedback.
-
----
-#### 📄 Slide 4: Guided Examples & Pair Challenge
-- **Real-World Example:** Everyday application of ${topicName}.
-- **Pair Activity:** 5-minute partner discussion ticket.
-- **Speaker Notes:** Circulate around the room providing UDL scaffolding.
-
----
-#### 📄 Slide 5: Summary & Exit Ticket
-- **Key Takeaways:** 3 essential bullet points to remember.
-- **Exit Question:** "What was your main insight during today's lesson?"
-`;
-    }
-
-    return `### 🖥️ Estructura para Presentación Canva / PowerPoint (Diapositivas)
-**Tema:** ${topicName}
-
----
-#### 📄 Diapositiva 1: Portada e Introducción
-- **Título Principal:** ${topicName}
-- **Subtítulo:** Guía Didáctica e Interactiva para el Aula
-- **Sugerencia Visual (Canva):** Ilustración vectorial temática de alto contraste con iconos representativos.
-- **Notas del Orador:** Bienvenida a los estudiantes, presentación del propósito del día y pregunta activadora.
-
----
-#### 📄 Diapositiva 2: Objetivos de Aprendizaje
-- **¿Qué aprenderemos hoy?:**
-  1. Definición y conceptos fundamentales de ${topicName}.
-  2. Identificación de características clave y ejemplos prácticos.
-  3. Aplicación en actividades colaborativas del entorno escolar.
-- **Notas del Orador:** Explicar los objetivos en lenguaje accesible de Lectura Fácil.
-
----
-#### 📄 Diapositiva 3: Explicación y Conceptos Clave
-- **Contenido Central:** Desglose estructurado de los elementos principales de ${topicName}.
-- **Esquema Gráfico:** Mapa visual de 3 pasos o infografía conceptual.
-- **Notas del Orador:** Realizar pausas breves de comprensión y resolver dudas iniciales.
-
----
-#### 📄 Diapositiva 4: Ejemplos Prácticos y Desafío en Parejas
-- **Ejemplo Cotidiano:** Aplicación directa del tema en la vida real.
-- **Reto Práctico:** Ejercicio en parejas de 5 minutos.
-- **Notas del Orador:** Monitorear el aula ofreciendo apoyos DUA a quienes lo requieran.
-
----
-#### 📄 Diapositiva 5: Resumen y Ticket de Salida
-- **Ideas Clave:** 3 puntos indispensables para recordar.
-- **Reflexión de Cierre:** "¿Cuál fue el aprendizaje más valioso de la sesión?"
-`;
-  }
-
-  // 2. QUIZ IMPRIMIBLE / EXÁMENES / EVALUACIONES
-  if (nStr.includes('quiz') || nStr.includes('examen') || nStr.includes('evaluación') || nStr.includes('prueba') || nStr.includes('test')) {
-    if (isEnglish) {
-      return `### 📝 Printable Quiz & Formative Assessment (Accessible Format)
-**Topic:** ${topicName} | **Student Name:** ____________________ | **Grade:** _____
-
----
-#### ❓ Question 1: Multiple Choice
-What is the core definition or main purpose of **${topicName}**?
-- [ ] A) A theoretical concept without practical application.
-- [ ] B) An essential foundation that structures key knowledge in this unit.
-- [ ] C) A tool used exclusively in advanced research.
-- [ ] D) None of the above.
-
----
-#### ❓ Question 2: True or False
-Indicate whether the following statement is True (T) or False (F):
-> *"The principles of ${topicName} can be applied to solve real-life classroom problems."*
-- (   ) True (T)
-- (   ) False (F)
-
----
-#### ❓ Question 3: Multiple Choice (Practical Application)
-Which of the following is a direct example of applying **${topicName}**?
-- [ ] A) Collaborative problem-solving using structured steps.
-- [ ] B) Memorizing facts without understanding their meaning.
-- [ ] C) Ignoring instructions and procedures.
-- [ ] D) Passive reading with no critical reflection.
-
----
-#### ❓ Question 4: Fill in the Blank
-Complete the sentence:
-> *"The primary goal of learning ${topicName} is to develop ___________ and meaningful skills."*
-
----
-#### ❓ Question 5: Short Answer & Reflection
-In your own words, explain why studying **${topicName}** is useful in daily life:
-__________________________________________________________________________________
-__________________________________________________________________________________
-
----
-#### 🔑 Teacher Answer Key & Rubric
-1. **B** | 2. **True (T)** | 3. **A** | 4. **Practical / Interactive** | 5. **Qualitative Evaluation**
-`;
-    }
-
-    return `### 📝 Quiz Imprimible y Evaluación Formativa (Lectura Fácil)
-**Tema:** ${topicName} | **Nombre del Estudiante:** ____________________ | **Grado:** _____
-
----
-#### ❓ Pregunta 1: Selección Múltiple
-¿Cuál es la definición o propósito central de **${topicName}**?
-- [ ] A) Una teoría sin aplicación práctica en el aula.
-- [ ] B) Un concepto fundamental que organiza los saberes de esta unidad.
-- [ ] C) Una herramienta exclusiva de investigaciones avanzadas.
-- [ ] D) Ninguna de las anteriores.
-
----
-#### ❓ Pregunta 2: Verdadero o Falso
-Indica si la siguiente afirmación es Verdadera (V) o Falsa (F):
-> *"Los conceptos de ${topicName} se pueden aplicar para resolver problemas reales del entorno escolar."*
-- (   ) Verdadero (V)
-- (   ) Falso (F)
-
----
-#### ❓ Pregunta 3: Selección Múltiple (Aplicación Práctica)
-¿Cuál de los siguientes ejemplos corresponde a la aplicación directa de **${topicName}**?
-- [ ] A) Trabajo colaborativo y resolución de problemas por pasos.
-- [ ] B) Memorización mecánica de datos sin comprensión.
-- [ ] C) Omisión de reglas y pautas didácticas.
-- [ ] D) Lectura pasiva sin interpretación crítica.
-
----
-#### ❓ Pregunta 4: Completar la Oración
-Completa el espacio en blanco con la palabra adecuada:
-> *"El objetivo de aprender ${topicName} es desarrollar habilidades ___________ e inclusivas."*
-
----
-#### ❓ Pregunta 5: Respuesta Corta y Reflexión
-Con tus propias palabras, explica por qué es importante aprender sobre **${topicName}**:
-__________________________________________________________________________________
-__________________________________________________________________________________
-
----
-#### 🔑 Clave de Respuestas (Para el Docente)
-1. **Respuesta B** | 2. **Verdadero (V)** | 3. **Respuesta A** | 4. **Prácticas / Significativas** | 5. **Criterio Cualitativo DUA**
-`;
-  }
-
-  // 3. JUEGOS EN LÍNEA / ACTIVIDADES LÚDICAS
-  if (nStr.includes('juego') || nStr.includes('lúdica') || nStr.includes('game') || nStr.includes('kahoot') || nStr.includes('wordwall') || nStr.includes('educaplay')) {
-    if (isEnglish) {
-      return `### 🎮 Recommended Interactive Educational Games
-**Topic:** ${topicName}
-
----
-#### 🕹️ Game 1: Interactive Question Wheel (Wordwall)
-- **Platform:** Wordwall
-- **Direct Creation Link:** [Create Game on Wordwall](https://wordwall.net)
-- **Game Rules:** Students spin the interactive wheel and answer challenge questions on **${topicName}**.
-
----
-#### 🕹️ Game 2: Real-Time Classroom Trivia (Kahoot / Quizizz)
-- **Platform:** Kahoot / Quizizz
-- **Direct Creation Link:** [Create Quiz on Kahoot](https://kahoot.com)
-- **Game Rules:** 5 to 10 timed questions displayed live on screen for individual or group points.
-
----
-#### 🕹️ Game 3: Concept & Definition Memory Match (Educaplay)
-- **Platform:** Educaplay
-- **Direct Creation Link:** [Create Game on Educaplay](https://www.educaplay.com)
-- **Game Rules:** Pair terms related to **${topicName}** with visual icons or short definitions.
-`;
-    }
-
-    return `### 🎮 Juegos Educativos e Interactivos Recomendados
-**Tema:** ${topicName}
-
----
-#### 🕹️ Juego 1: Ruleta Giratoria de Preguntas (Wordwall)
-- **Plataforma Recomendada:** Wordwall
-- **Enlace de Creación Directa:** [Crear Ruleta en Wordwall](https://wordwall.net/es)
-- **Reglas del Juego:** Los estudiantes giran la ruleta digital y responden la pregunta o reto sobre **${topicName}** donde se detenga la flecha.
-
----
-#### 🕹️ Juego 2: Desafío de Trivia en Vivo (Kahoot / Quizizz)
-- **Plataforma Recomendada:** Kahoot / Quizizz
-- **Enlace de Creación Directa:** [Crear Quiz en Kahoot](https://kahoot.com)
-- **Reglas del Juego:** 5 a 10 preguntas con límite de tiempo proyectadas en pantalla para sumar puntos en equipo.
-
----
-#### 🕹️ Juego 3: Parejas de Memoria y Conceptos (Educaplay)
-- **Plataforma Recomendada:** Educaplay
-- **Enlace de Creación Directa:** [Crear Juego en Educaplay](https://es.educaplay.com)
-- **Reglas del Juego:** Emparejar las tarjetas de conceptos de **${topicName}** con su icono o definición en el menor tiempo posible.
-`;
-  }
-
-  // 4. VIDEOS Y RECURSOS MULTIMEDIA
-  if (nStr.includes('video') || nStr.includes('multimedia') || nStr.includes('youtube')) {
-    return `### 🎬 Videos Educativos y Recursos Multimedia Recomendados
-**Tema:** ${topicName}
-
----
-#### 🎥 Video 1: Explicación Didáctica Animada (3 - 5 min)
-- **Título Recomendado:** Introducción sencilla a ${topicName}
-- **Búsqueda en YouTube:** [Buscar Video Explicativo](https://www.youtube.com/results?search_query=${encodeURIComponent(topicName + ' explicacion didactica')})
-- **Actividad:** Pausa en el minuto 2:00 para resolver 1 pregunta de verificación en el tablero.
-
----
-#### 🎥 Video 2: Ejemplos Prácticos de la Vida Real (4 min)
-- **Título Recomendado:** ${topicName} en el mundo real
-- **Búsqueda en YouTube:** [Buscar Ejemplos Reales](https://www.youtube.com/results?search_query=${encodeURIComponent(topicName + ' ejemplos cotidianos')})
-- **Actividad:** Discusión guiada de 5 minutos en parejas sobre lo observado.
-`;
-  }
-
-  // 5. TALLERES / GUÍAS DE EJERCICIOS Y PRÁCTICAS
-  if (nStr.includes('taller') || nStr.includes('ejercicio') || nStr.includes('worksheet') || nStr.includes('práctica')) {
-    return `### 📝 Taller Práctico de Aplicación y Ejercicios
-**Tema:** ${topicName} | **Estudiante:** ____________________
-
----
-#### 🔹 Ejercicio 1: Caso Práctico Guiado
-Analiza la siguiente situación sobre **${topicName}**:
-> *Situación:* Se presenta un problema cotidiano donde es necesario aplicar los conceptos aprendidos hoy.
-- **Paso 1:** Identifica el elemento principal del problema.
-- **Paso 2:** Escribe 2 pasos clave para resolverlo.
-
----
-#### 🔹 Ejercicio 2: Relación de Términos
-Une con una línea cada concepto con su correspondiente aplicación:
-1. Concepto A  ---------> (  ) Aplicación práctica en el salón.
-2. Concepto B  ---------> (  ) Definición central del tema.
-3. Concepto C  ---------> (  ) Resultado final esperado.
-
----
-#### 🔹 Ejercicio 3: Reto de Creación Propia
-Diseña tu propio ejemplo práctico de **${topicName}** y compártelo con tu compañero de mesa.
-`;
-  }
-
-  // 6. DEFAULT: PLAN DE CLASE Y GUÍA DUA COMPLETA
-  if (isEnglish) {
-    return `### 📘 AI Educational Guide & Lesson Plan
-**Topic:** ${topicName}
-
-#### 🎯 Learning Objectives & Key Competencies
-- Understand the core concepts, terminology, and practical applications of the topic.
-- Promote active participation and critical thinking through structured activities.
-- Apply Universal Design for Learning (UDL) principles to ensure accessibility for all students.
-
-#### 📝 Recommended Class Sequence (90 Minutes)
-1. **Initial Engagement (15 min):** Interactive warmup and diagnostic question to activate prior knowledge.
-2. **Guided Practice (50 min):** Step-by-step conceptual walkthrough, visual graphic organizers, and pair work.
-3. **Assessment & Reflection (25 min):** Formative check-for-understanding quiz and differentiated exit ticket.
-
-#### 🤝 Universal Design for Learning (UDL) Adaptations
-- **Visual Support:** High-contrast diagrams, mind maps, and bulleted summary cards.
-- **Kinesthetic & Interactive:** Hands-on exercises, digital interactive tools, and small group collaboration.
-- **Flexible Pacing:** Extended execution time, simplified reading guides, and multi-modal responses.
-
-#### 📊 Formative Assessment Rubric
-| Criteria | Excellent (4) | Good (3) | Developing (2) |
-| :--- | :--- | :--- | :--- |
-| **Concept Understanding** | Demonstrates full mastery & detail | Clear comprehension with minor gaps | Basic recall, needs guidance |
-| **Class Engagement** | Active & constructive contributor | Consistent participation | Passive engagement |
-| **Adapted Tasks** | Complete UDL adaptation | Satisfactory adaptation | Partial completion |
-`;
-  }
-
-  return `### 📘 Guía Pedagógica y Plan de Clase DUA
-**Tema / Selección:** ${topicName}
-
-#### 🎯 Objetivos de Aprendizaje y Competencias Clave
-- Comprender los conceptos fundamentales, la terminología y la aplicación práctica del tema.
-- Fomentar la participación activa y el pensamiento crítico mediante actividades guiadas y colaborativas.
-- Aplicar principios del Diseño Universal para el Aprendizaje (DUA) garantizando accesibilidad total.
-
-#### 📝 Estructura y Secuencia de Clase (90 Minutos)
-1. **Iniciación y Diagnóstico (15 min):** Pregunta activadora y lluvia de ideas con apoyo de recursos gráficos.
-2. **Construcción del Conocimiento (50 min):** Explicación dialogada en bloques breves, organizadores conceptuales y trabajo en parejas.
-3. **Cierre Formativo y Refuerzo (25 min):** Quiz de comprobación en lectura fácil y ticket de salida diferenciado.
-
-#### 🤝 Adaptaciones DUA e Inclusión Pedagógica
-- **Apoyos Visuales:** Fichas en Lectura Fácil, pictogramas secuenciales y mapas mentales.
-- **Canal Sensorial y Práctico:** Dinámicas multisensoriales, tareas manipulativas y trabajo entre pares.
-- **Flexibilidad Evaluativa:** Tiempos extendidos, instrucciones divididas en micropasos y respuestas orales o gráficas.
-
-#### 📊 Rúbrica de Evaluación Formativa
-| Criterio | Sobresaliente (4) | Aceptable (3) | En Proceso (2) |
-| :--- | :--- | :--- | :--- |
-| **Dominio Conceptual** | Demuestra comprensión profunda | Entendimiento claro con detalles menores | Conceptos básicos con acompañamiento |
-| **Participación** | Colabora activamente en la sesión | Participa de manera constante | Actitud pasiva, requiere estimulación |
-| **Trabajo Adaptado** | Completa con excelencia la guía DUA | Cumple las metas de adaptación | Entrega parcial con apoyo |
-`;
+// HELPERS PARA EXPORTACIÓN NATIVA A WORD (.DOCX)
+// ==========================================
+
+// 1. Tabla Institucional de Contexto en la Cabecera
+const createWordContextBox = (context) => {
+  const { materia, grado, periodo, tema, tipo } = context;
+  const fechaStr = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      // Fila 1: Encabezado Institucional
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            columnSpan: 2,
+            shading: { fill: "4F46E5" },
+            margins: { top: 120, bottom: 120, left: 160, right: 160 },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({ text: "EDUDOCENT — SISTEMA DE PLANIFICACIÓN PEDAGÓGICA", bold: true, color: "FFFFFF", size: 22 })
+                ]
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({ text: "Copiloto Docente e Inteligencia Artificial Educativa", italics: true, color: "E0E7FF", size: 18 })
+                ]
+              })
+            ]
+          })
+        ]
+      }),
+      // Fila 2: Materia y Grado
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            shading: { fill: "F8FAFC" },
+            margins: { top: 100, bottom: 100, left: 140, right: 140 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "📚 ASIGNATURA: ", bold: true, color: "1E293B", size: 20 }),
+                  new TextRun({ text: String(materia || "Curricular").replace(/^🧩\s*/, ''), bold: true, color: "4F46E5", size: 20 })
+                ]
+              })
+            ]
+          }),
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            shading: { fill: "F8FAFC" },
+            margins: { top: 100, bottom: 100, left: 140, right: 140 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "🎓 GRADO / NIVEL: ", bold: true, color: "1E293B", size: 20 }),
+                  new TextRun({ text: grado ? `${grado}° Bachillerato` : "Bachillerato (6°-11°)", bold: true, color: "0284C7", size: 20 })
+                ]
+              })
+            ]
+          })
+        ]
+      }),
+      // Fila 3: Periodo y Recurso
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            shading: { fill: "F8FAFC" },
+            margins: { top: 100, bottom: 100, left: 140, right: 140 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "📅 PERIODO ACADÉMICO: ", bold: true, color: "1E293B", size: 20 }),
+                  new TextRun({ text: periodo ? `Periodo ${periodo}` : "Periodo 1", bold: true, color: "D97706", size: 20 })
+                ]
+              })
+            ]
+          }),
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            shading: { fill: "F8FAFC" },
+            margins: { top: 100, bottom: 100, left: 140, right: 140 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "🧩 TIPO DE RECURSO: ", bold: true, color: "1E293B", size: 20 }),
+                  new TextRun({ text: tipo || "Organizador Gráfico", bold: true, color: "7C3AED", size: 20 })
+                ]
+              })
+            ]
+          })
+        ]
+      }),
+      // Fila 4: Tema Específico
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            columnSpan: 2,
+            shading: { fill: "EEF2FF" },
+            margins: { top: 100, bottom: 100, left: 140, right: 140 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "📌 TEMA ESPECÍFICO DE LA CLASE: ", bold: true, color: "312E81", size: 20 }),
+                  new TextRun({ text: tema || "Desarrollo Temático", bold: true, color: "4338CA", size: 20 })
+                ]
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: `Fecha de emisión: ${fechaStr}`, italics: true, color: "64748B", size: 16 })
+                ]
+              })
+            ]
+          })
+        ]
+      })
+    ]
+  });
 };
 
-const callGeminiAPI = async (userPrompt, systemPrompt, apiKey) => {
-  const payload = {
-    contents: [{ parts: [{ text: userPrompt }] }],
-    systemInstruction: { parts: [{ text: systemPrompt }] }
-  };
+// 2. Parser de Tablas HTML nativo para DOCX (Cuadro Comparativo / Tablas)
+const parseHTMLTableToDocx = (tableElement) => {
+  const rows = [];
+  const trs = tableElement.querySelectorAll('tr');
+  if (trs.length === 0) return null;
 
-  const keyToUse = apiKey || import.meta.env.VITE_GEMINI_API_KEY;
+  trs.forEach((tr, trIdx) => {
+    const cells = [];
+    const ths = tr.querySelectorAll('th');
+    const tds = tr.querySelectorAll('td');
+    const isHeaderRow = ths.length > 0 || trIdx === 0;
+    const cellElements = ths.length > 0 ? ths : tds;
+    const colCount = Math.max(cellElements.length, 1);
+    const colWidthPct = Math.floor(100 / colCount);
 
-  if (keyToUse) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${keyToUse}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+    cellElements.forEach((cell, cellIdx) => {
+      const cellText = cell.textContent.trim();
+      const isFirstCol = cellIdx === 0;
+      
+      cells.push(
+        new TableCell({
+          width: { size: colWidthPct, type: WidthType.PERCENTAGE },
+          shading: {
+            fill: isHeaderRow
+              ? "4F46E5"
+              : (trIdx % 2 === 0 ? "F8FAFC" : "FFFFFF")
+          },
+          margins: { top: 100, bottom: 100, left: 140, right: 140 },
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: cellText,
+                  bold: isHeaderRow || isFirstCol,
+                  color: isHeaderRow ? "FFFFFF" : (isFirstCol ? "312E81" : "1E293B"),
+                  size: isHeaderRow ? 20 : 18
+                })
+              ]
+            })
+          ]
+        })
+      );
+    });
+
+    if (cells.length > 0) {
+      rows.push(
+        new TableRow({
+          tableHeader: isHeaderRow,
+          children: cells
+        })
+      );
+    }
+  });
+
+  if (rows.length === 0) return null;
+  return new Table({
+    rows,
+    width: { size: 100, type: WidthType.PERCENTAGE }
+  });
+};
+
+// 3. Parser de Tablas Markdown nativo para DOCX
+const parseMarkdownTableToDocx = (markdownTableText) => {
+  const lines = markdownTableText.trim().split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return null;
+
+  const rows = [];
+  const isDivider = (line) => /^\|?(\s*:?-+:?\s*\|?)+$/.test(line);
+
+  let rowIndex = 0;
+  lines.forEach((line) => {
+    if (isDivider(line)) return;
+    const rawCells = line.split('|').map(c => c.trim());
+    if (line.startsWith('|')) rawCells.shift();
+    if (line.endsWith('|')) rawCells.pop();
+
+    if (rawCells.length === 0) return;
+    const isHeader = rowIndex === 0;
+    const colWidthPct = Math.floor(100 / rawCells.length);
+
+    const docxCells = rawCells.map((cellText, colIdx) => {
+      const isFirstCol = colIdx === 0;
+      return new TableCell({
+        width: { size: colWidthPct, type: WidthType.PERCENTAGE },
+        shading: {
+          fill: isHeader
+            ? "4F46E5"
+            : (rowIndex % 2 === 0 ? "F8FAFC" : "FFFFFF")
+        },
+        margins: { top: 100, bottom: 100, left: 140, right: 140 },
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: cellText.replace(/\*\*(.*?)\*\*/g, '$1'),
+                bold: isHeader || isFirstCol || /\*\*(.*?)\*\*/.test(cellText),
+                color: isHeader ? "FFFFFF" : (isFirstCol ? "312E81" : "1E293B"),
+                size: isHeader ? 20 : 18
+              })
+            ]
+          })
+        ]
       });
-      if (response.ok) {
-        const result = await response.json();
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    });
+
+    rows.push(new TableRow({ tableHeader: isHeader, children: docxCells }));
+    rowIndex++;
+  });
+
+  if (rows.length === 0) return null;
+  return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } });
+};
+
+// 4. Parser recursivo de listas DOM para Mapas Mentales y Conceptuales
+const parseDOMListToDocx = (listEl, currentLevel, elements) => {
+  const items = listEl.children;
+  const levelColors = ["1E40AF", "0284C7", "334155", "64748B"];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.tagName.toLowerCase() === 'li') {
+      const clone = item.cloneNode(true);
+      const nestedLists = clone.querySelectorAll('ul, ol');
+      nestedLists.forEach(n => n.remove());
+      const itemText = clone.textContent.trim();
+
+      if (itemText) {
+        elements.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: itemText,
+                bold: currentLevel === 0,
+                color: levelColors[Math.min(currentLevel, levelColors.length - 1)] || "1E293B",
+                size: currentLevel === 0 ? 22 : (currentLevel === 1 ? 20 : 18)
+              })
+            ],
+            bullet: { level: Math.min(3, currentLevel) },
+            spacing: { before: currentLevel === 0 ? 100 : 30, after: 30 }
+          })
+        );
+      }
+
+      const childLists = item.querySelectorAll(':scope > ul, :scope > ol');
+      childLists.forEach(childList => {
+        parseDOMListToDocx(childList, currentLevel + 1, elements);
+      });
+    }
+  }
+};
+
+// 5. Parser integral de Contenido Jerárquico (HTML Completo + Tablas + Listas + Markdown)
+const parseContentToDocxElements = (rawContent, isMindOrConcept = false) => {
+  const elements = [];
+  if (!rawContent) return elements;
+
+  const contentStr = String(rawContent);
+
+  // Si contiene HTML estructurado (tablas, encabezados, párrafos, listas, saltos)
+  if (typeof DOMParser !== 'undefined' && /<[a-z][\s\S]*>/i.test(contentStr)) {
+    try {
+      const parser = new DOMParser();
+      // Asegurar que <br> genere saltos de bloque limpios
+      const normalizedHTML = contentStr
+        .replace(/<br\s*\/?>\s*<br\s*\/?>/gi, '</p><p><br/></p><p>')
+        .replace(/<br\s*\/?>/gi, '<br/>');
+      const doc = parser.parseFromString(`<div>${normalizedHTML}</div>`, 'text/html');
+      const root = doc.body.firstElementChild || doc.body;
+
+      const processNode = (node) => {
+        if (!node) return;
+        if (node.nodeType === Node.TEXT_NODE) {
+          const txt = node.textContent?.trim();
+          if (txt) {
+            elements.push(new Paragraph({
+              children: [new TextRun({ text: txt, size: 20 })],
+              spacing: { after: 90 }
+            }));
+          }
+          return;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const tag = node.tagName.toLowerCase();
+
+        // 1. Tablas HTML
+        if (tag === 'table') {
+          const docxTable = parseHTMLTableToDocx(node);
+          if (docxTable) {
+            elements.push(docxTable);
+            elements.push(new Paragraph({ text: "", spacing: { after: 120 } }));
+          }
+          return;
+        }
+
+        // 2. Listas ordenadas o no ordenadas
+        if (tag === 'ul' || tag === 'ol') {
+          parseDOMListToDocx(node, 0, elements);
+          elements.push(new Paragraph({ text: "", spacing: { after: 80 } }));
+          return;
+        }
+
+        // 3. Encabezados
+        if (tag.startsWith('h') && tag.length === 2) {
+          const lvl = parseInt(tag[1]) || 2;
+          const text = node.textContent?.trim();
+          if (text) {
+            elements.push(new Paragraph({
+              text,
+              heading: lvl === 1 ? HeadingLevel.HEADING_1 : (lvl === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3),
+              spacing: { before: 240, after: 120 }
+            }));
+          }
+          return;
+        }
+
+        // 4. Párrafos y bloques de texto con formato en línea (<b>, <strong>, <i>, <em>)
+        if (tag === 'p' || tag === 'div' || tag === 'blockquote') {
+          // Si contiene elementos de bloque hijos (ej. tablas o listas dentro de divs)
+          const blockChildren = node.querySelectorAll(':scope > table, :scope > ul, :scope > ol, :scope > h1, :scope > h2, :scope > h3');
+          if (blockChildren.length > 0) {
+            Array.from(node.children).forEach(child => processNode(child));
+            return;
+          }
+
+          const runs = [];
+          const extractRuns = (el) => {
+            el.childNodes.forEach(child => {
+              if (child.nodeType === Node.TEXT_NODE) {
+                const text = child.textContent;
+                if (text) runs.push(new TextRun({ text, size: 20 }));
+              } else if (child.nodeType === Node.ELEMENT_NODE) {
+                const cTag = child.tagName.toLowerCase();
+                if (cTag === 'br') {
+                  runs.push(new TextRun({ text: '\n' }));
+                } else {
+                  const isBold = cTag === 'b' || cTag === 'strong';
+                  const isItalic = cTag === 'i' || cTag === 'em';
+                  const isUnderline = cTag === 'u';
+                  const text = child.textContent;
+                  if (text) {
+                    runs.push(new TextRun({
+                      text,
+                      bold: isBold,
+                      italics: isItalic,
+                      underline: isUnderline ? {} : undefined,
+                      size: 20
+                    }));
+                  }
+                }
+              }
+            });
+          };
+
+          extractRuns(node);
+
+          if (runs.length > 0) {
+            elements.push(new Paragraph({
+              children: runs,
+              spacing: { after: 100 }
+            }));
+          }
+          return;
+        }
+
+        // Si es otro contenedor (section, article, etc.), recorrer hijos
+        Array.from(node.childNodes).forEach(child => processNode(child));
+      };
+
+      Array.from(root.childNodes).forEach(child => processNode(child));
+
+      if (elements.length > 0) {
+        return elements;
+      }
+    } catch (e) {
+      console.warn("Fallo en DOMParser de Word, usando fallback regex:", e);
+    }
+  }
+
+  // Parser para Markdown y Texto Jerárquico
+  const lines = contentStr.split('\n');
+  let inMarkdownTable = false;
+  let markdownTableLines = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Detección de Tabla Markdown
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      inMarkdownTable = true;
+      markdownTableLines.push(line);
+      continue;
+    } else if (inMarkdownTable) {
+      inMarkdownTable = false;
+      const docxTable = parseMarkdownTableToDocx(markdownTableLines.join('\n'));
+      if (docxTable) {
+        elements.push(docxTable);
+        elements.push(new Paragraph({ text: "", spacing: { after: 120 } }));
+      }
+      markdownTableLines = [];
+    }
+
+    if (!trimmed) {
+      elements.push(new Paragraph({ text: "", spacing: { after: 60 } }));
+      continue;
+    }
+
+    // Encabezados Markdown
+    if (trimmed.startsWith('# ')) {
+      elements.push(new Paragraph({
+        text: trimmed.replace(/^#\s+/, ''),
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 280, after: 140 }
+      }));
+      continue;
+    }
+    if (trimmed.startsWith('## ')) {
+      elements.push(new Paragraph({
+        text: trimmed.replace(/^##\s+/, ''),
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 240, after: 120 }
+      }));
+      continue;
+    }
+    if (trimmed.startsWith('### ')) {
+      elements.push(new Paragraph({
+        text: trimmed.replace(/^###\s+/, ''),
+        heading: HeadingLevel.HEADING_3,
+        spacing: { before: 200, after: 100 }
+      }));
+      continue;
+    }
+    if (trimmed.startsWith('#### ')) {
+      elements.push(new Paragraph({
+        text: trimmed.replace(/^####\s+/, ''),
+        heading: HeadingLevel.HEADING_4,
+        spacing: { before: 160, after: 80 }
+      }));
+      continue;
+    }
+
+    // Listas Multinivel para Mapas Conceptuales y Mentales
+    const bulletMatch = line.match(/^(\s*)([-*•]|\d+\.|\w\.)\s+(.+)$/);
+    if (bulletMatch || (isMindOrConcept && (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('•')))) {
+      const leadingSpaces = bulletMatch ? bulletMatch[1].length : (line.match(/^\s*/)[0].length);
+      const textContent = bulletMatch ? bulletMatch[3].trim() : trimmed.replace(/^[-*•]\s+/, '');
+      const level = Math.min(3, Math.floor(leadingSpaces / 2));
+      const levelColors = ["1E40AF", "0284C7", "334155", "64748B"];
+      const isBold = level === 0 || textContent.includes('**') || textContent.startsWith('Concepto') || textContent.startsWith('Tema') || textContent.startsWith('Nodo');
+
+      elements.push(new Paragraph({
+        children: [
+          new TextRun({
+            text: textContent.replace(/\*\*(.*?)\*\*/g, '$1'),
+            bold: isBold,
+            color: levelColors[level] || "1E293B",
+            size: level === 0 ? 22 : (level === 1 ? 20 : 18)
+          })
+        ],
+        bullet: { level },
+        spacing: { before: level === 0 ? 80 : 30, after: 30 }
+      }));
+      continue;
+    }
+
+    // Párrafo estándar
+    elements.push(new Paragraph({
+      children: [
+        new TextRun({
+          text: trimmed.replace(/<[^>]*>?/gm, '').replace(/\*\*(.*?)\*\*/g, '$1'),
+          bold: /\*\*(.*?)\*\*/.test(trimmed)
+        })
+      ],
+      spacing: { after: 90 }
+    }));
+  }
+
+  if (inMarkdownTable && markdownTableLines.length > 0) {
+    const docxTable = parseMarkdownTableToDocx(markdownTableLines.join('\n'));
+    if (docxTable) {
+      elements.push(docxTable);
+      elements.push(new Paragraph({ text: "", spacing: { after: 120 } }));
+    }
+  }
+
+  return elements;
+};
+
+
+// ==========================================
+// FUNCIÓN ASÍNCRONA: Exportar a documento Word (.docx) usando docx
+// ==========================================
+export const exportToWord = async (titulo, resultado, showToast, extraContext = {}) => {
+  const docTitle = (typeof resultado === 'object' && (resultado?.titulo_periodo || resultado?.titulo_plan || resultado?.titulo)) || titulo || "Recurso_EDUDOCENT";
+
+  const contextMateria = extraContext?.materia || resultado?._materia || resultado?.materia || "";
+  const contextGrado = extraContext?.grado || resultado?._grado || resultado?.grado || "";
+  const contextPeriodo = extraContext?.periodo || resultado?._periodo || resultado?.periodo || "";
+  const contextTema = extraContext?.tema || resultado?._tema || resultado?.tema || docTitle;
+  const contextTipo = extraContext?.tipo || resultado?._tipo || resultado?.tipo || resultado?.customTipo || "Organizador Gráfico / Plan de Clase";
+
+  const isMindOrConcept = (
+    contextTipo.toLowerCase().includes('mapa') ||
+    contextTipo.toLowerCase().includes('mental') ||
+    contextTipo.toLowerCase().includes('conceptual') ||
+    (docTitle && (docTitle.toLowerCase().includes('mapa') || docTitle.toLowerCase().includes('mental') || docTitle.toLowerCase().includes('conceptual')))
+  );
+
+  try {
+    const docChildren = [];
+
+    // 1. Cabecera Institucional y Contexto de la Clase
+    docChildren.push(
+      createWordContextBox({
+        materia: contextMateria,
+        grado: contextGrado,
+        periodo: contextPeriodo,
+        tema: contextTema,
+        tipo: contextTipo
+      })
+    );
+    docChildren.push(new Paragraph({ text: "", spacing: { after: 200 } }));
+
+    // Si viene texto libre o string o formato libre
+    if (typeof resultado === 'string' || (resultado && (resultado._texto_libre || resultado.tipo_respuesta === 'libre' || resultado.contenido_markdown))) {
+      const raw = typeof resultado === 'string' ? resultado : (resultado.contenido_markdown || resultado._texto_libre || "");
+      const parsedElements = parseContentToDocxElements(raw, isMindOrConcept);
+      parsedElements.forEach(el => docChildren.push(el));
+    } else if (resultado && typeof resultado === 'object') {
+      // 1. Clases Semanales (13 Temas Sueltos) en Tabla Nativa
+      if (Array.isArray(resultado.clases_semanales) && resultado.clases_semanales.length > 0) {
+        docChildren.push(
+          new Paragraph({
+            text: "Plan de 13 Clases Semanales (13 Temas Sueltos)",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 150 }
+          })
+        );
+
+        const tableRows = [
+          new TableRow({
+            tableHeader: true,
+            children: [
+              new TableCell({
+                width: { size: 15, type: WidthType.PERCENTAGE },
+                shading: { fill: "4F46E5" },
+                margins: { top: 100, bottom: 100, left: 140, right: 140 },
+                children: [new Paragraph({ children: [new TextRun({ text: "Semana", bold: true, color: "FFFFFF" })] })]
+              }),
+              new TableCell({
+                width: { size: 35, type: WidthType.PERCENTAGE },
+                shading: { fill: "4F46E5" },
+                margins: { top: 100, bottom: 100, left: 140, right: 140 },
+                children: [new Paragraph({ children: [new TextRun({ text: "Tema Específico", bold: true, color: "FFFFFF" })] })]
+              }),
+              new TableCell({
+                width: { size: 50, type: WidthType.PERCENTAGE },
+                shading: { fill: "4F46E5" },
+                margins: { top: 100, bottom: 100, left: 140, right: 140 },
+                children: [new Paragraph({ children: [new TextRun({ text: "Guía de Explicación (Voz Alta)", bold: true, color: "FFFFFF" })] })]
+              })
+            ]
+          })
+        ];
+
+        resultado.clases_semanales.forEach((clase, idx) => {
+          tableRows.push(
+            new TableRow({
+              children: [
+                new TableCell({
+                  width: { size: 15, type: WidthType.PERCENTAGE },
+                  shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF" },
+                  margins: { top: 100, bottom: 100, left: 140, right: 140 },
+                  children: [new Paragraph({ children: [new TextRun({ text: `Semana ${clase.semana || idx + 1}`, bold: true, color: "4F46E5" })] })]
+                }),
+                new TableCell({
+                  width: { size: 35, type: WidthType.PERCENTAGE },
+                  shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF" },
+                  margins: { top: 100, bottom: 100, left: 140, right: 140 },
+                  children: [new Paragraph({ children: [new TextRun({ text: clase?.tema_unico_y_diferente || clase?.tema_suelto || clase?.tema || '', bold: true, color: "1E293B" })] })]
+                }),
+                new TableCell({
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                  shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF" },
+                  margins: { top: 100, bottom: 100, left: 140, right: 140 },
+                  children: [new Paragraph({ text: String(clase?.detalle_explicacion || clase?.explicacion || '').replace(/<[^>]*>?/gm, '') })]
+                })
+              ]
+            })
+          );
+        });
+
+        docChildren.push(
+          new Table({
+            rows: tableRows,
+            width: { size: 100, type: WidthType.PERCENTAGE }
+          })
+        );
+        docChildren.push(new Paragraph({ text: "", spacing: { after: 150 } }));
+      }
+
+      // 2. Contenido Principal / Organizador Gráfico / Cuadro Comparativo / Talleres
+      if (resultado.contenido_principal) {
+        docChildren.push(
+          new Paragraph({
+            text: "Desarrollo del Recurso Pedagógico",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 150 }
+          })
+        );
+
+        const parsedMain = parseContentToDocxElements(resultado.contenido_principal, isMindOrConcept);
+        parsedMain.forEach(el => docChildren.push(el));
+      }
+
+      // 3. Ideas de Diapositivas
+      if (resultado.ideas_presentacion || resultado.estructura_presentacion) {
+        docChildren.push(
+          new Paragraph({
+            text: "Estructura para Presentaciones / Diapositivas (PowerPoint / Canva)",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 150 }
+          })
+        );
+        const presElements = parseContentToDocxElements(resultado.ideas_presentacion || resultado.estructura_presentacion, false);
+        presElements.forEach(el => docChildren.push(el));
+      }
+
+      // 4. Guía Docente
+      if (resultado.guia_docente) {
+        docChildren.push(
+          new Paragraph({
+            text: "Guía Didáctica para el Docente",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 150 }
+          })
+        );
+        const guiaElements = parseContentToDocxElements(resultado.guia_docente, false);
+        guiaElements.forEach(el => docChildren.push(el));
+      }
+
+      // 5. Recursos Online Dinámicos
+      if (resultado.recursos_online) {
+        docChildren.push(
+          new Paragraph({
+            text: "Recursos Online y Dinámicas Interactivas",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 150 }
+          })
+        );
+        let textoRecursos = '';
+        if (Array.isArray(resultado.recursos_online)) {
+          textoRecursos = resultado.recursos_online
+            .map(r => `• ${r?.plataforma || 'Juego'}: ${r?.url_busqueda || ''}`)
+            .join('\n');
+        } else if (typeof resultado.recursos_online === 'string') {
+          textoRecursos = resultado.recursos_online.replace(/<[^>]*>?/gm, '');
+        } else {
+          textoRecursos = JSON.stringify(resultado.recursos_online);
+        }
+        docChildren.push(
+          new Paragraph({
+            text: textoRecursos,
+            spacing: { after: 120 }
+          })
+        );
+      }
+
+      // 6. Adaptación Inclusiva DUA / PIAR
+      if (resultado.adaptacion_inclusiva) {
+        docChildren.push(
+          new Paragraph({
+            text: "Estrategias de Adaptación DUA e Inclusión",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 150 }
+          })
+        );
+        const duaText = typeof resultado.adaptacion_inclusiva === 'string'
+          ? resultado.adaptacion_inclusiva
+          : (resultado.adaptacion_inclusiva?.estrategias_generales || JSON.stringify(resultado.adaptacion_inclusiva));
+        const duaElements = parseContentToDocxElements(duaText, false);
+        duaElements.forEach(el => docChildren.push(el));
+      }
+    }
+
+    // Pie de página
+    docChildren.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "EDUDOCENT — Copiloto Docente e Inteligencia Artificial Educativa",
+            italics: true,
+            color: "94A3B8",
+            size: 18
+          })
+        ],
+        spacing: { before: 400 },
+        alignment: AlignmentType.CENTER
+      })
+    );
+
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: docChildren.filter(Boolean)
+      }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${docTitle.replace(/[^a-zA-Z0-9_-]/g, '_')}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    if (showToast) showToast('Éxito', 'Documento Word (.docx) descargado correctamente', 'success');
+  } catch (err) {
+    console.error("Error al compilar documento docx:", err);
+    if (showToast) showToast('Error', 'No se pudo compilar el archivo Word', 'error');
+  }
+};
+
+// ==========================================
+// Utilidad: Llamar a la API de Gemini con Timeout Estricto y Control de Errores
+// ==========================================
+export const callGeminiAPI = async (userPrompt, systemPrompt, apiKey, timeoutMs = 90000) => {
+  const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || "";
+
+  if (!keyToUse) {
+    throw new Error('Error de conexión con la IA, por favor intenta de nuevo');
+  }
+
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error('Error de conexión con la IA, por favor intenta de nuevo'));
+    }, timeoutMs);
+  });
+
+  const apiPromise = (async () => {
+    const genAI = new GoogleGenerativeAI(keyToUse);
+    const candidateModels = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-1.5-flash"];
+    let lastError = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemPrompt,
+          generationConfig: { responseMimeType: "application/json" }
+        });
+        const result = await model.generateContent(userPrompt);
+        const text = result?.response?.text();
         if (text && text.trim().length > 10) {
           return text;
         }
+      } catch (err) {
+        lastError = err;
+        console.warn(`Reintento con modelo alternativo tras fallo en ${modelName}:`, err?.message || err);
       }
-    } catch (err) {
-      console.warn("API de Gemini en vivo no disponible, usando generador inteligente:", err);
     }
-  }
+    throw lastError || new Error('Error de conexión con la IA, por favor intenta de nuevo');
+  })();
 
-  // Generador inteligente garantizado:
-  return generateFallbackNotebookAIResponse(userPrompt, systemPrompt);
+  try {
+    return await Promise.race([apiPromise, timeoutPromise]);
+  } catch (err) {
+    console.error("Fallo exacto en la IA:", err);
+    throw new Error('Error de conexión con la IA, por favor intenta de nuevo');
+  }
 };
 
-// Intentar parsear JSON desde una respuesta de texto
+// Intentar parsear JSON desde una respuesta de texto con sanitización estricta
 const tryParseJSON = (rawText) => {
   if (!rawText) return null;
+  const cleaned = String(rawText).replace(/```json/gi, '').replace(/```/g, '').trim();
   try {
-    return JSON.parse(rawText);
-  } catch {
-    const cleaned = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    try {
-      return JSON.parse(cleaned);
-    } catch {
-      return null;
-    }
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.error("Fallo exacto en la IA:", err);
+    return null;
   }
 };
 
@@ -1117,36 +1611,44 @@ const tryParseJSON = (rawText) => {
 // CSS para tablas HTML y botones de enlaces generados por la IA
 // ==========================================
 const tableStyles = `
+  .notebook-pro-modal {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
   .ai-html-content table {
     width: 100%;
     border-collapse: collapse;
     margin: 12px 0;
-    font-size: 12px;
+    font-size: 13px;
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    font-family: 'Inter', 'Segoe UI', sans-serif;
   }
   .ai-html-content table th {
     background: linear-gradient(135deg, #4f46e5, #6366f1);
     color: white;
     font-weight: 800;
     text-transform: uppercase;
-    font-size: 10px;
-    letter-spacing: 0.05em;
-    padding: 12px 14px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 14px 16px;
     text-align: left;
     border: 1px solid #4338ca;
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }
   .ai-html-content table td {
-    padding: 10px 14px;
+    padding: 12px 16px;
     border: 1px solid #e2e8f0;
     color: #334155;
     font-weight: 500;
-    line-height: 1.5;
+    line-height: 1.7;
     vertical-align: top;
+    font-size: 13px;
   }
   .ai-html-content table tr:nth-child(even) td {
-    background-color: #f8fafc;
+    background-color: #f1f5f9;
   }
   .ai-html-content table tr:nth-child(odd) td {
     background-color: #ffffff;
@@ -1154,6 +1656,67 @@ const tableStyles = `
   .ai-html-content table tr:hover td {
     background-color: #eef2ff;
     transition: background-color 0.2s;
+  }
+  .notebook-13-table {
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  }
+  .notebook-13-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: linear-gradient(135deg, #4338ca, #6366f1);
+    color: white;
+    font-weight: 900;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 16px 18px;
+    text-align: left;
+    border: none;
+    border-bottom: 3px solid #312e81;
+  }
+  .notebook-13-table tbody td {
+    padding: 14px 18px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+    font-weight: 500;
+    line-height: 1.75;
+    vertical-align: top;
+    font-size: 13.5px;
+  }
+  .notebook-13-table tbody tr:nth-child(even) td {
+    background-color: #f1f5f9;
+  }
+  .notebook-13-table tbody tr:nth-child(odd) td {
+    background-color: #ffffff;
+  }
+  .notebook-13-table tbody tr:hover td {
+    background-color: #eef2ff;
+    transition: background-color 0.25s ease;
+  }
+  .notebook-13-table td.semana-col {
+    font-weight: 900;
+    color: #4338ca;
+    text-align: center;
+    font-size: 13px;
+    width: 90px;
+    white-space: nowrap;
+    background-color: inherit;
+  }
+  .notebook-13-table td.tema-col {
+    font-weight: 800;
+    color: #0f172a;
+    width: 25%;
+    font-size: 13px;
+  }
+  .notebook-13-table td.guia-col {
+    font-weight: 500;
+    color: #334155;
+    line-height: 1.8;
+    font-size: 13.5px;
   }
   .ai-html-content a {
     display: inline-flex;
@@ -1179,18 +1742,34 @@ const tableStyles = `
     color: #1e293b;
     font-weight: 900;
     margin: 16px 0 8px 0;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
   }
   .ai-html-content h1 { font-size: 18px; }
   .ai-html-content h2 { font-size: 15px; }
   .ai-html-content h3 { font-size: 13px; }
-  .ai-html-content p { margin-bottom: 8px; line-height: 1.6; }
+  .ai-html-content p { margin-bottom: 8px; line-height: 1.7; font-size: 13px; }
   .ai-html-content ul, .ai-html-content ol {
-    padding-left: 20px;
-    margin: 8px 0;
+    padding-left: 24px;
+    margin: 12px 0;
+  }
+  .ai-html-content ul {
+    list-style-type: disc;
+  }
+  .ai-html-content ul ul {
+    list-style-type: circle;
+    margin: 6px 0;
+  }
+  .ai-html-content ul ul ul {
+    list-style-type: square;
   }
   .ai-html-content li {
-    margin-bottom: 4px;
-    line-height: 1.5;
+    margin-bottom: 6px;
+    line-height: 1.7;
+    font-size: 13.5px;
+  }
+  .ai-html-content li > ul, .ai-html-content li > ol {
+    margin-top: 6px;
+    margin-bottom: 0;
   }
   .ai-html-content strong, .ai-html-content b {
     font-weight: 800;
@@ -1300,33 +1879,42 @@ const GameIframeModal = ({ isOpen, onClose, gameUrl, gameTitle }) => {
 // ==========================================
 // COMPONENTE: Bar de Plataformas de Juegos
 // ==========================================
-const PlataformasJuegosBar = ({ onLaunchGame }) => {
+const PlataformasJuegosBar = ({ onLaunchGame, activeTopic = '', currentSubject = '' }) => {
   return (
     <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3 shadow-lg my-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className="text-xl">🎮</span>
           <h4 className="font-black text-xs uppercase tracking-wider text-emerald-400">Plataformas de Juegos Educativos</h4>
         </div>
         <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full font-bold border border-emerald-500/30">EDUDOCENT PLAY</span>
       </div>
-      <p className="text-xs text-slate-300 font-medium">Haz clic en cualquier plataforma para abrirla directamente en una pestaña nueva e iniciar sesión sin problemas:</p>
+      <p className="text-xs text-slate-300 font-medium">
+        {activeTopic
+          ? `Juegos interactivos y dinámicas recomendadas para "${activeTopic}":`
+          : "Haz clic en cualquier plataforma para abrirla directamente con actividades y cuestionarios:"}
+      </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-        {plataformasJuegos.map((plat) => (
-          <a
-            key={plat.name}
-            href={plat.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-slate-800/80 hover:bg-emerald-900/60 border border-slate-700 hover:border-emerald-500/60 p-3 rounded-xl cursor-pointer transition-all hover:scale-[1.02] flex items-center gap-3 group no-underline"
-          >
-            <span className="text-2xl group-hover:scale-110 transition-transform">{plat.icon}</span>
-            <div className="min-w-0 flex-1">
-              <h5 className="font-extrabold text-xs text-white truncate">{plat.name}</h5>
-              <p className="text-[9px] text-slate-400 group-hover:text-emerald-300 truncate transition-colors">Abrir ↗</p>
-            </div>
-          </a>
-        ))}
+        {plataformasJuegos.map((plat) => {
+          const directUrl = activeTopic ? getPlataformaSearchUrl(plat.name, activeTopic, currentSubject) : plat.url;
+          return (
+            <a
+              key={plat.name}
+              href={directUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-slate-800/80 hover:bg-emerald-900/60 border border-slate-700 hover:border-emerald-500/60 p-3 rounded-xl cursor-pointer transition-all hover:scale-[1.02] flex items-center gap-3 group no-underline"
+            >
+              <span className="text-2xl group-hover:scale-110 transition-transform">{plat.icon}</span>
+              <div className="min-w-0 flex-1">
+                <h5 className="font-extrabold text-xs text-white truncate">{plat.name}</h5>
+                <p className="text-[9px] text-slate-400 group-hover:text-emerald-300 truncate transition-colors">
+                  {activeTopic ? 'Abrir juego del tema ↗' : 'Abrir ↗'}
+                </p>
+              </div>
+            </a>
+          );
+        })}
       </div>
     </div>
   );
@@ -1370,123 +1958,274 @@ const PlataformasDiapositivasBar = () => {
 
 
 // ==========================================
+// COMPONENTE: Renderizado Dinámico Múltiple de Recursos Online y Juegos
+// ==========================================
+const getPlatformBadgeStyle = (name = '') => {
+  const n = String(name).toLowerCase();
+  if (n.includes('wordwall')) return { icon: '🎯', gradient: 'from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white' };
+  if (n.includes('kahoot')) return { icon: '⚡', gradient: 'from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white' };
+  if (n.includes('educaplay')) return { icon: '🧩', gradient: 'from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white' };
+  if (n.includes('quizizz')) return { icon: '🎮', gradient: 'from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white' };
+  if (n.includes('blooket')) return { icon: '🏰', gradient: 'from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white' };
+  if (n.includes('cerebriti')) return { icon: '🧠', gradient: 'from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white' };
+  if (n.includes('phet')) return { icon: '🔬', gradient: 'from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white' };
+  if (n.includes('baamboozle')) return { icon: '🐼', gradient: 'from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white' };
+  return { icon: '🕹️', gradient: 'from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white' };
+};
+
+const RecursosOnlineDinamicos = ({ recursos }) => {
+  if (!recursos) return null;
+
+  // Renderizado dinámico cuando la IA devuelve un arreglo
+  const items = Array.isArray(recursos) ? recursos : [];
+
+  if (items.length > 0) {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
+          🎮 Juegos interactivos y simuladores específicos para este tema:
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {items.map((item, idx) => {
+            const plataformaName = item?.plataforma || `Juego ${idx + 1}`;
+            const rawUrl = item?.url_busqueda || item?.url || '#';
+            const badge = getPlatformBadgeStyle(plataformaName);
+
+            return (
+              <a
+                key={idx}
+                href={rawUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-black shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 no-underline bg-gradient-to-r ${badge.gradient}`}
+              >
+                <span className="text-base">{badge.icon}</span>
+                <span>{plataformaName}</span>
+                <span className="text-[10px] opacity-80 font-normal">↗</span>
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback si viene en formato texto/HTML
+  if (typeof recursos === 'string') {
+    return (
+      <div
+        className="ai-html-content text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium whitespace-pre-wrap space-y-4"
+        dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(recursos)) }}
+      />
+    );
+  }
+
+  return null;
+};
+
+
+// ==========================================
 // COMPONENTE: Tarjetas de Resultado IA Seccionadas con Pestañas Internas
 // ==========================================
 const ResultadoIACards = ({ resultado, onReset, onClose, showToast, onLaunchGame, defaultSection = 'todos', customTipo }) => {
   const [activeSection, setActiveSection] = useState(defaultSection);
 
   if (!resultado) return null;
-  const docTitle = resultado.titulo_periodo || resultado.titulo_plan || resultado.titulo || "Plan_13_Clases_EDUDOCENT";
+
+  // =========================================================================
+  // RENDERIZADO CONDICIONAL SEGURO: FORMATO LIBRE / PERSONALIZADO
+  // Si tipo_respuesta === 'libre', se prohíbe iterar arreglos o dibujar tablas.
+  // =========================================================================
+  if (resultado.tipo_respuesta === 'libre' || resultado.contenido_markdown) {
+    const markdownContent = resultado.contenido_markdown || resultado.contenido || resultado._texto_libre || "";
+    const docTitle = resultado.titulo || resultado.titulo_plan || "Documento_Personalizado_EDUDOCENT";
+
+    return (
+      <div className="space-y-4 animate-pageIn notebook-pro-modal">
+        <style>{tableStyles}</style>
+
+        {/* Mensaje Empático */}
+        {resultado.mensaje_empatico && (
+          <div className="bg-rose-50 border-l-4 border-rose-400 p-3 mb-4 rounded-r-xl">
+            <p className="text-sm text-rose-900 font-medium whitespace-pre-wrap">{resultado.mensaje_empatico}</p>
+          </div>
+        )}
+
+        {/* Bar de Encabezado y Descarga */}
+        <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <span className="text-[10px] font-black tracking-widest uppercase text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 dark:text-indigo-300 px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/40">
+            📝 Documento / Formato Libre Generado
+          </span>
+          <button
+            onClick={() => exportToWord(docTitle, resultado, showToast)}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer border-0"
+          >
+            <FileText size={14} />
+            📄 Descargar en Word (.doc)
+          </button>
+        </div>
+
+        {/* Contenedor Seguro de Interpretación Markdown */}
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div
+            className="ai-html-content text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium overflow-x-auto"
+            dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(markdownContent)) }}
+          />
+        </div>
+
+        {/* Botones de acción inferiores */}
+        <div className="flex gap-3 pt-2">
+          <button
+            onClick={onReset}
+            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer border-0"
+          >
+            ← Generar Otro
+          </button>
+          <button
+            onClick={() => exportToWord(docTitle, resultado, showToast)}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 border-0"
+          >
+            <FileText size={15} />
+            Descargar Word (.doc)
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md border-0"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const datosPaquete = resultado;
+  const docTitle = resultado.titulo_periodo || resultado.titulo_plan || resultado.titulo || "Recurso_EDUDOCENT";
+
+  const hasWeeklyClasses = Array.isArray(resultado.clases_semanales) && resultado.clases_semanales.length > 0;
+  const hasPresentation = Boolean(resultado.ideas_presentacion || resultado.estructura_presentacion);
+  const hasOnlyPresentation = hasPresentation && !hasWeeklyClasses && !resultado.plan_13_clases && !resultado.contenido_principal;
+
+  const isSlideResource = Boolean(
+    (customTipo && (customTipo.includes('Presentación') || customTipo.includes('Canva') || customTipo.includes('PPT') || customTipo.includes('Diapositiva'))) ||
+    hasOnlyPresentation ||
+    (hasPresentation && !hasWeeklyClasses && !resultado.contenido_principal)
+  );
+
+  const isVideoResource = Boolean(
+    (customTipo && customTipo.includes('Video')) ||
+    docTitle.toLowerCase().includes('video') ||
+    Boolean(resultado.busqueda_youtube)
+  );
+
+  const isGameResource = Boolean(
+    (customTipo && (customTipo.includes('Juego') || customTipo.includes('Trivia'))) ||
+    docTitle.toLowerCase().includes('juego') ||
+    docTitle.toLowerCase().includes('trivia') ||
+    Boolean(resultado.recursos_online)
+  );
+
+  const cleanTopicForSearch = (docTitle || "").replace(/guion|video|didactico|explicativo|presentacion|diapositiva|evaluativo|taller|quiz|examen|guia|juego|trivia/gi, '').trim();
+  const searchMateria = resultado._materia || resultado.materia || "";
+  const youtubeSearchQuery = encodeURIComponent(`${cleanTopicForSearch || "tema"} ${searchMateria} explicacion educacion`);
+  const youtubeUrl = resultado.busqueda_youtube || `https://www.youtube.com/results?search_query=${youtubeSearchQuery}`;
+
+  const recommendedApp = getRecommendedGameApp(searchMateria);
+  const recommendedGameUrl = getPlataformaSearchUrl(recommendedApp.name, cleanTopicForSearch, searchMateria);
 
   const handleDownloadPPT = () => {
-    try {
-      let pres = new pptxgen();
-      pres.author = 'EDUDOCENT AI';
-      pres.company = 'EDUDOCENT';
-      pres.title = docTitle;
-      pres.layout = 'LAYOUT_16x9';
-
-      const htmlContent = resultado.ideas_presentacion || resultado.estructura_presentacion || resultado.contenido_principal || resultado.plan_13_clases || "";
-      
-      // Separar por la etiqueta [DIAPOSITIVA
-      const slides = htmlContent.split(/\[DIAPOSITIVA\s*\d*\]/i).filter(s => s.trim().length > 0);
-      
-      if (slides.length === 0 || !htmlContent.includes('[TITULO]')) {
-        // Fallback genérico para contenido que no es presentación nativa
-        let slide = pres.addSlide();
-        slide.background = { color: "FFFFFF" };
-        slide.addText(docTitle, { x: 0.5, y: 0.5, w: '90%', h: 1.0, fontSize: 32, bold: true, color: "0F172A", align: "center" });
-        
-        let textClean = htmlContent.replace(/<br\s*[\/]?>/gi, '\n')
-                                   .replace(/<\/p>|<\/div>|<\/li>|<\/tr>/gi, '\n')
-                                   .replace(/<[^>]*>?/gm, ''); 
-
-        const chunks = textClean.match(/[\s\S]{1,1000}/g) || [textClean];
-        chunks.forEach((chunk, index) => {
-           let contentSlide = (index === 0) ? slide : pres.addSlide();
-           if(index !== 0) contentSlide.background = { color: "FFFFFF" };
-           contentSlide.addText(chunk.trim(), { 
-             x: 0.5, y: (index === 0) ? 1.8 : 0.5, w: '90%', h: (index === 0) ? 3.5 : 4.8, 
-             fontSize: 16, color: "334155", valign: 'top', align: 'left'
-           });
-        });
-      } else {
-        slides.forEach((slideData) => {
-          let slide = pres.addSlide();
-          slide.background = { color: "FFFFFF" };
-          
-          let textClean = slideData.replace(/<[^>]*>?/gm, ''); // Quitar HTML si lo hay
-          
-          let titleMatch = textClean.match(/\[TITULO\]([\s\S]*?)\[CONTENIDO\]/i);
-          let contentMatch = textClean.match(/\[CONTENIDO\]([\s\S]*)/i);
-          
-          let titleText = titleMatch ? titleMatch[1].trim() : "Diapositiva";
-          let contentText = contentMatch ? contentMatch[1].trim() : textClean.substring(0, 800);
-
-          // Título de la diapositiva
-          slide.addText(titleText, { 
-            x: 0.5, y: 0.4, w: '90%', h: 0.8, 
-            fontSize: 28, bold: true, color: "0D9488" 
-          });
-          
-          // Línea separadora
-          slide.addShape(pres.ShapeType.line, { x: 0.5, y: 1.3, w: '90%', h: 0, line: { color: "E2E8F0", width: 2 } });
-
-          // Contenido de la diapositiva
-          slide.addText(contentText, { 
-            x: 0.5, y: 1.6, w: '90%', h: 3.2, 
-            fontSize: 18, color: "334155", valign: 'top' 
-          });
-          
-          // Footer
-          slide.addText('EDUDOCENT AI', { x: 0.5, y: 5.2, w: '30%', h: 0.3, fontSize: 10, color: "94A3B8" });
-        });
-      }
-
-      const fileName = `${docTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pptx`;
-      pres.writeFile({ fileName: fileName }).then(() => {
-        if(showToast) showToast('Éxito', 'Presentación PowerPoint descargada correctamente', 'success');
-      });
-    } catch (error) {
-      console.error("Error generating PPTX:", error);
-      if(showToast) showToast('Error', 'No se pudo generar el PowerPoint', 'error');
-    }
+    descargarPPTX(docTitle, resultado, showToast);
   };
 
   return (
-    <div className="space-y-4 animate-pageIn">
+    <div className="space-y-4 animate-pageIn notebook-pro-modal">
       <style>{tableStyles}</style>
+
+      {/* Mensaje Empático */}
+      {resultado.mensaje_empatico && (
+        <div className="bg-rose-50 border-l-4 border-rose-400 p-3 mb-4 rounded-r-xl">
+          <p className="text-sm text-rose-900 font-medium whitespace-pre-wrap">{resultado.mensaje_empatico}</p>
+        </div>
+      )}
 
       {/* Bar de Encabezado y Descarga */}
       <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
         <span className="text-[10px] font-black tracking-widest uppercase text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 px-3 py-1.5 rounded-full border border-emerald-100 dark:border-emerald-800/40">
-          ✅ 13 Clases Independientes + Diapositivas Generadas
+          ✅ {isSlideResource
+            ? "Presentación de Diapositivas (PowerPoint / Canva)"
+            : isVideoResource
+            ? "Guion de Video + Recursos de YouTube"
+            : isGameResource
+            ? "Juego Interactivo y Dinámicas Lúdicas"
+            : hasWeeklyClasses
+            ? "13 Clases Independientes"
+            : (customTipo || "Recurso Pedagógico Listo")}
         </span>
-        {((customTipo && customTipo === 'Video Explicativo') || docTitle.toLowerCase().includes('video')) ? (
-          <button
-            onClick={() => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(docTitle + " tema educativo")}`, '_blank')}
-            className="bg-red-600 hover:bg-red-700 text-white text-xs font-black px-4 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer border-0"
-          >
-            <PlayCircle size={15} />
-            ▶ Buscar Video en YouTube
-          </button>
-        ) : (
+
+        {isSlideResource ? (
           <div className="flex gap-2">
             <button
-              onClick={() => exportToWord(docTitle, resultado, showToast)}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black px-3 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer border-0"
-            >
-              <FileText size={14} />
-              📄 Word
-            </button>
-            <button
               onClick={handleDownloadPPT}
-              className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black px-3 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer border-0"
+              className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-black px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer border-0"
             >
               <Presentation size={14} />
-              📊 PPT
+              📊 PPTX
+            </button>
+            <a
+              href="https://www.canva.com/presentations/templates/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white text-[11px] font-black px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer no-underline border-0"
+            >
+              🎨 Abrir Canva ↗
+            </a>
+          </div>
+        ) : isVideoResource ? (
+          <div className="flex gap-2">
+            <a
+              href={youtubeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-red-600 hover:bg-red-700 text-white text-[11px] font-black px-4 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer no-underline border-0"
+            >
+              <PlayCircle size={15} />
+              ▶️ Ver Video del Tema en YouTube
+            </a>
+            <button
+              onClick={() => exportToWord(docTitle, resultado, showToast)}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black px-3 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer border-0"
+            >
+              <FileText size={14} />
+              📄 Word (.docx)
             </button>
           </div>
+        ) : isGameResource ? (
+          <div className="flex gap-2">
+            <a
+              href={recommendedGameUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer no-underline border-0"
+            >
+              <span className="text-sm">{recommendedApp.icon}</span>
+              Abrir {recommendedApp.name} ↗
+            </a>
+            <button
+              onClick={() => exportToWord(docTitle, resultado, showToast)}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer border-0"
+            >
+              <FileText size={14} />
+              📄 Word (.docx)
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => exportToWord(docTitle, resultado, showToast)}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-4 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer border-0"
+          >
+            <FileText size={15} />
+            📄 Guardar en Word (.docx)
+          </button>
         )}
       </div>
 
@@ -1503,7 +2242,7 @@ const ResultadoIACards = ({ resultado, onReset, onClose, showToast, onLaunchGame
             onClick={() => setActiveSection('principal')}
             className={`px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition-all ${activeSection === 'principal' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm font-black' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
           >
-            📅 13 Clases Semanales
+            {isVideoResource ? "🎬 Guion y Video" : "📅 13 Clases Semanales"}
           </button>
         )}
         {(resultado.ideas_presentacion || resultado.estructura_presentacion) && (
@@ -1537,49 +2276,275 @@ const ResultadoIACards = ({ resultado, onReset, onClose, showToast, onLaunchGame
         <div className="bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-slate-800 dark:to-indigo-950/50 p-5 rounded-2xl border border-indigo-100/60 dark:border-slate-700">
           <div className="flex items-center gap-2 mb-2">
             <BookOpen size={16} className="text-indigo-600 dark:text-indigo-400" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-300">Título General del Periodo</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-300">Título General del Recurso</span>
           </div>
           <p className="text-sm font-black text-slate-800 dark:text-white leading-snug">{resultado.titulo_periodo || resultado.titulo_plan || resultado.titulo}</p>
         </div>
       )}
 
-      {/* RENDERIZADO DEL ARREGLO clases_semanales (13 Temas Sueltos en Tabla HTML) */}
-      {Array.isArray(resultado.clases_semanales) && resultado.clases_semanales.length > 0 && (activeSection === 'todos' || activeSection === 'principal') && (
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm animate-pageIn space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <ClipboardList size={16} className="text-blue-600 dark:text-blue-400" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Plan de 13 Clases Semanales (13 Temas Sueltos Desglosados)</span>
+      {/* ============== SI SOLO ES PRESENTACIÓN Y ESTÁ EN 'TODOS': VISTA EXPANDIDA Y CENTRADA ============== */}
+      {hasOnlyPresentation && activeSection === 'todos' && (
+        <div className="w-full max-w-5xl mx-auto space-y-6 animate-pageIn">
+          <div className="w-full max-w-5xl mx-auto bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-850 dark:to-amber-950/40 p-6 sm:p-8 rounded-3xl border border-amber-200/70 dark:border-amber-900/40 shadow-sm space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-amber-200/60 dark:border-amber-900/40">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-sm">
+                  <Presentation size={22} />
+                </div>
+                <div>
+                  <span className="text-xs font-black uppercase tracking-widest text-amber-800 dark:text-amber-300">📊 Esquema para Presentación / Diapositivas</span>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 font-medium">Estructura slide a slide lista para PowerPoint y Canva</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 px-3 py-1 rounded-full font-black uppercase tracking-wider">DIAPOSITIVAS READY</span>
+                <button onClick={handleDownloadPPT} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-black px-4 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer border-0">
+                  <Download size={14} /> DESCARGAR PPTX
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => exportToWord(docTitle, resultado, showToast)}
-              className="text-[10px] font-bold text-blue-600 dark:text-blue-300 hover:underline flex items-center gap-1 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg border border-blue-100 dark:border-blue-800/40"
-            >
-              📄 Guardar en Word
-            </button>
+
+            <PlataformasDiapositivasBar />
+
+            <div
+              className="ai-html-content text-sm sm:text-base text-slate-800 dark:text-slate-200 leading-relaxed font-medium overflow-x-auto whitespace-pre-wrap space-y-4 p-2"
+              dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.ideas_presentacion || resultado.estructura_presentacion)) }}
+            />
           </div>
 
-          <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse my-2 text-xs">
+          {resultado.recursos_online && (
+            <div className="w-full max-w-5xl mx-auto bg-sky-50/50 dark:bg-slate-800 p-6 rounded-3xl border border-sky-100/60 dark:border-slate-700 space-y-4 shadow-sm">
+              <div className="flex items-center gap-2">
+                <Globe size={18} className="text-sky-600 dark:text-sky-400" />
+                <span className="text-xs font-black uppercase tracking-widest text-sky-600 dark:text-sky-400">🎮 Recursos Online y Juegos Interactivos</span>
+              </div>
+              <RecursosOnlineDinamicos recursos={resultado.recursos_online} />
+              <PlataformasJuegosBar onLaunchGame={onLaunchGame} />
+            </div>
+          )}
+
+          {resultado.adaptacion_inclusiva && (
+            <div className="w-full max-w-5xl mx-auto bg-violet-50/50 dark:bg-slate-800 p-6 rounded-3xl border border-violet-100/60 dark:border-slate-700 space-y-3 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <Lightbulb size={18} className="text-violet-600" />
+                <span className="text-xs font-black uppercase tracking-widest text-violet-600">🧩 Adaptación DUA / Inclusiva</span>
+              </div>
+              <div className="ai-html-content text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium whitespace-pre-wrap space-y-4" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.adaptacion_inclusiva)) }} />
+            </div>
+          )}
+
+          {resultado.guia_docente && (
+            <div className="w-full max-w-5xl mx-auto bg-emerald-50/50 dark:bg-slate-800 p-6 rounded-3xl border border-emerald-100/60 dark:border-slate-700 space-y-3 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <GraduationCap size={18} className="text-emerald-600" />
+                <span className="text-xs font-black uppercase tracking-widest text-emerald-600">📑 Guía para el Docente</span>
+              </div>
+              <div className="ai-html-content text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium whitespace-pre-wrap space-y-4" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.guia_docente)) }} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ============== LAYOUT DE 2 COLUMNAS (Cuando existen 13 clases o contenido principal) ============== */}
+      {!hasOnlyPresentation && activeSection === 'todos' && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 animate-pageIn">
+          {/* === COLUMNA PRINCIPAL (2/3): Tabla de 13 Semanas / Guion === */}
+          <div className="xl:col-span-2 space-y-4">
+            
+            {/* Banner Destacado para Videos de YouTube */}
+            {isVideoResource && (
+              <div className="bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-950/40 dark:to-rose-950/30 p-4 rounded-2xl border border-red-200 dark:border-red-900/50 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+                <div className="flex items-center gap-2.5 text-red-700 dark:text-red-300">
+                  <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow">
+                    <PlayCircle size={22} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black leading-tight">Videos Educativos Complementarios</p>
+                    <p className="text-[10px] text-red-600/80 dark:text-red-400 font-medium">Accede a explicaciones y recursos audiovisuales listos para el aula</p>
+                  </div>
+                </div>
+                <a
+                  href={youtubeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-black px-5 py-3 rounded-xl shadow-lg shadow-red-500/25 hover:shadow-red-500/40 transition-all flex items-center justify-center gap-2 no-underline text-center border-0 cursor-pointer"
+                >
+                  <PlayCircle size={16} />
+                  ▶️ Ver videos sugeridos en YouTube
+                </a>
+              </div>
+            )}
+
+            {/* Tabla de 13 semanas (Solo si se generó un plan curricular de 13 clases) */}
+            {hasWeeklyClasses && (
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList size={18} className="text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">📅 Plan de 13 Clases Semanales</span>
+                  </div>
+                  <button
+                    onClick={() => exportToWord(docTitle, resultado, showToast)}
+                    className="text-[10px] font-bold text-blue-600 dark:text-blue-300 hover:underline flex items-center gap-1 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg border border-blue-100 dark:border-blue-800/40"
+                  >
+                    📄 Guardar en Word
+                  </button>
+                </div>
+                <div className="overflow-x-auto custom-scrollbar rounded-2xl border border-slate-200 dark:border-slate-700" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                  <table className="notebook-13-table w-full text-left border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="w-[90px] text-center p-3">Semana</th>
+                        <th className="w-[25%] p-3">Tema Específico</th>
+                        <th className="p-3">Guía de Explicación (Voz Alta para Alumnos)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resultado.clases_semanales.map((clase, index) => (
+                        <tr key={index} className="border-b">
+                          <td className="p-3">{clase?.semana || index + 1}</td>
+                          <td className="p-3 font-bold">{String(clase?.tema_unico_y_diferente || clase?.tema_suelto || 'Tema ' + (index + 1))}</td>
+                          <td className="p-3 whitespace-pre-wrap">{String(clase?.detalle_explicacion || '')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Fallback plan_13_clases HTML raw */}
+            {resultado.plan_13_clases && !hasWeeklyClasses && (
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList size={16} className="text-blue-600" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-600">Plan de 13 Clases Independientes</span>
+                  </div>
+                  <button onClick={() => exportToWord(docTitle, resultado, showToast)} className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">📄 Guardar en Word</button>
+                </div>
+                <div className="ai-html-content text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium overflow-x-auto" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.plan_13_clases)) }} />
+              </div>
+            )}
+
+            {/* Contenido Principal (Taller / Quiz / Examen / Guía / Tabla) */}
+            {resultado.contenido_principal && !hasWeeklyClasses && !resultado.plan_13_clases && (
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList size={18} className="text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">
+                      {isVideoResource ? "🎬 Guion Didáctico del Video" : (customTipo || "📝 Recurso Pedagógico Generado")}
+                    </span>
+                  </div>
+                  {isVideoResource ? (
+                    <a
+                      href={youtubeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-0 shadow-sm no-underline cursor-pointer"
+                    >
+                      <PlayCircle size={14} />
+                      ▶️ Ver videos sugeridos en YouTube
+                    </a>
+                  ) : (
+                    <button onClick={() => exportToWord(docTitle, resultado, showToast)} className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800 cursor-pointer transition-all active:scale-95">📄 Guardar en Word (.docx)</button>
+                  )}
+                </div>
+                <div className="ai-html-content text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-medium overflow-x-auto" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.contenido_principal)) }} />
+              </div>
+            )}
+
+            {/* Fallback amigable solo si no hay ningún campo reconocido */}
+            {!hasWeeklyClasses && !resultado.plan_13_clases && !resultado.contenido_principal && !resultado.ideas_presentacion && (
+              <div className="p-5 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-sm overflow-auto rounded-2xl border border-amber-200 dark:border-amber-900/60">
+                <p className="font-bold mb-2">Información del recurso generado:</p>
+                <div className="ai-html-content" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado._texto_libre || JSON.stringify(resultado, null, 2))) }} />
+              </div>
+            )}
+          </div>
+
+          {/* === PANEL LATERAL (1/3): Presentación + Recursos + DUA + Guía === */}
+          <div className="xl:col-span-1 space-y-4">
+            {/* Estructura de Presentación */}
+            {(resultado.ideas_presentacion || resultado.estructura_presentacion) && (
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-850 dark:to-amber-950/40 p-5 rounded-2xl border border-amber-200/70 dark:border-amber-900/40 shadow-sm space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Presentation size={16} className="text-amber-600 dark:text-amber-400" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-800 dark:text-amber-300">📊 Presentación</span>
+                  </div>
+                  <button onClick={handleDownloadPPT} className="bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black px-2.5 py-1 rounded-full shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer border-0">
+                    <Download size={10} /> PPTX
+                  </button>
+                </div>
+                <div className="ai-html-content text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-medium overflow-x-auto whitespace-pre-wrap space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.ideas_presentacion || resultado.estructura_presentacion)) }} />
+              </div>
+            )}
+
+            {/* Recursos Online */}
+            {resultado.recursos_online && (
+              <div className="bg-sky-50/50 dark:bg-slate-800 p-5 rounded-2xl border border-sky-100/60 dark:border-slate-700 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Globe size={16} className="text-sky-600 dark:text-sky-400" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-sky-600 dark:text-sky-400">🎮 Recursos Online</span>
+                </div>
+                <RecursosOnlineDinamicos recursos={resultado.recursos_online} />
+                <PlataformasJuegosBar onLaunchGame={onLaunchGame} />
+              </div>
+            )}
+
+            {/* Adaptación Inclusiva */}
+            {resultado.adaptacion_inclusiva && (
+              <div className="bg-violet-50/50 p-5 rounded-2xl border border-violet-100/60">
+                <div className="flex items-center gap-2 mb-3">
+                  <Lightbulb size={16} className="text-violet-600" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-violet-600">🧩 Adaptación DUA</span>
+                </div>
+                <div className="ai-html-content text-xs text-slate-700 leading-relaxed font-medium max-h-[250px] overflow-y-auto custom-scrollbar" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.adaptacion_inclusiva)) }} />
+              </div>
+            )}
+
+            {/* Guía Docente */}
+            {resultado.guia_docente && (
+              <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100/60">
+                <div className="flex items-center gap-2 mb-3">
+                  <GraduationCap size={16} className="text-emerald-600" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">📑 Guía para el Docente</span>
+                </div>
+                <div className="ai-html-content text-xs text-slate-700 leading-relaxed font-medium max-h-[250px] overflow-y-auto custom-scrollbar" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.guia_docente)) }} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============== VISTAS INDIVIDUALES POR PESTAÑA ============== */}
+      {/* Tabla de 13 semanas — vista individual (solo si hay clases semanales) */}
+      {hasWeeklyClasses && activeSection === 'principal' && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm animate-pageIn space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <ClipboardList size={18} className="text-blue-600 dark:text-blue-400" />
+              <span className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">📅 Plan de 13 Clases Semanales</span>
+            </div>
+            <button onClick={() => exportToWord(docTitle, resultado, showToast)} className="text-[10px] font-bold text-blue-600 dark:text-blue-300 hover:underline flex items-center gap-1 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg border border-blue-100 dark:border-blue-800/40">📄 Guardar en Word (.docx)</button>
+          </div>
+          <div className="overflow-x-auto custom-scrollbar rounded-2xl border border-slate-200 dark:border-slate-700" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+            <table className="notebook-13-table w-full text-left border-collapse">
               <thead>
-                <tr className="bg-indigo-600 dark:bg-indigo-700 text-white font-black">
-                  <th className="p-3 border border-indigo-700 dark:border-indigo-600 w-20 text-center">Semana</th>
-                  <th className="p-3 border border-indigo-700 dark:border-indigo-600 w-1/3">Tema Específico</th>
-                  <th className="p-3 border border-indigo-700 dark:border-indigo-600">Guía de Explicación (Voz Alta para Alumnos)</th>
+                <tr>
+                  <th className="w-[90px] text-center p-3">Semana</th>
+                  <th className="w-[25%] p-3">Tema Específico</th>
+                  <th className="p-3">Guía de Explicación (Voz Alta para Alumnos)</th>
                 </tr>
               </thead>
               <tbody>
-                {resultado.clases_semanales.map((c, idx) => (
-                  <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-800/60'}>
-                    <td className="p-3 border border-slate-200 dark:border-slate-800 font-black text-center text-indigo-600 dark:text-indigo-400">
-                      Semana {c.semana || idx + 1}
-                    </td>
-                    <td className="p-3 border border-slate-200 dark:border-slate-800 font-bold text-slate-900 dark:text-white">
-                      {c.tema_suelto}
-                    </td>
-                    <td className="p-3 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                      {c.detalle_explicacion}
-                    </td>
+                {resultado.clases_semanales.map((clase, index) => (
+                  <tr key={index} className="border-b">
+                    <td className="p-3">{clase?.semana || index + 1}</td>
+                    <td className="p-3 font-bold">{String(clase?.tema_unico_y_diferente || clase?.tema_suelto || 'Tema ' + (index + 1))}</td>
+                    <td className="p-3 whitespace-pre-wrap">{String(clase?.detalle_explicacion || '')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1588,125 +2553,120 @@ const ResultadoIACards = ({ resultado, onReset, onClose, showToast, onLaunchGame
         </div>
       )}
 
-      {/* Fallback para plan_13_clases si se envía como HTML raw */}
-      {resultado.plan_13_clases && !resultado.clases_semanales && (activeSection === 'todos' || activeSection === 'principal') && (
+      {/* Contenido Principal — vista individual cuando NO hay clases semanales */}
+      {resultado.contenido_principal && !hasWeeklyClasses && activeSection === 'principal' && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm animate-pageIn space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <ClipboardList size={18} className="text-blue-600 dark:text-blue-400" />
+              <span className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">
+                {customTipo || "Contenido Principal"}
+              </span>
+            </div>
+            <button onClick={() => exportToWord(docTitle, resultado, showToast)} className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800 cursor-pointer transition-all active:scale-95">📄 Guardar en Word (.docx)</button>
+          </div>
+          <div className="ai-html-content text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-medium overflow-x-auto" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.contenido_principal)) }} />
+        </div>
+      )}
+
+      {/* Fallback plan_13_clases — vista individual */}
+      {resultado.plan_13_clases && !hasWeeklyClasses && activeSection === 'principal' && (
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm animate-pageIn space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ClipboardList size={16} className="text-blue-600" />
               <span className="text-[10px] font-black uppercase tracking-widest text-blue-600">Plan de 13 Clases Independientes</span>
             </div>
-            <button
-              onClick={() => exportToWord(docTitle, resultado, showToast)}
-              className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100"
-            >
-              📄 Guardar en Word
-            </button>
+            <button onClick={() => exportToWord(docTitle, resultado, showToast)} className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">📄 Guardar en Word (.docx)</button>
           </div>
-          <div
-            className="ai-html-content text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium overflow-x-auto"
-            dangerouslySetInnerHTML={{ __html: sanitizeHTML(resultado.plan_13_clases) }}
-          />
+          <div className="ai-html-content text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium overflow-x-auto" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.plan_13_clases)) }} />
         </div>
       )}
 
-      {/* Tarjeta ideas_presentacion / estructura_presentacion (Diapositivas PowerPoint/Canva) */}
-      {(resultado.ideas_presentacion || resultado.estructura_presentacion) && (activeSection === 'todos' || activeSection === 'presentacion') && (
-        <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-850 dark:to-amber-950/40 p-5 rounded-2xl border border-amber-200/70 dark:border-amber-900/40 shadow-sm animate-pageIn space-y-3">
-          <div className="flex items-center justify-between">
+      {/* Tarjeta Diapositivas — vista individual */}
+      {(resultado.ideas_presentacion || resultado.estructura_presentacion) && activeSection === 'presentacion' && (
+        <div className="w-full max-w-5xl mx-auto bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-850 dark:to-amber-950/40 p-6 sm:p-8 rounded-3xl border border-amber-200/70 dark:border-amber-900/40 shadow-sm animate-pageIn space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-amber-200/60 dark:border-amber-900/40">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-sm">
+                <Presentation size={22} />
+              </div>
+              <div>
+                <span className="text-xs font-black uppercase tracking-widest text-amber-800 dark:text-amber-300">📊 Esquema para Presentación / Diapositivas</span>
+                <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 font-medium">Estructura slide a slide lista para PowerPoint y Canva</p>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
-              <Presentation size={18} className="text-amber-600 dark:text-amber-400" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800 dark:text-amber-300">Esquema para Presentación / Diapositivas (PowerPoint / Canva)</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-[9px] bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 px-2.5 py-1 rounded-full font-black uppercase tracking-wider">DIAPOSITIVAS READY</span>
-              <button
-                onClick={handleDownloadPPT}
-                className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer border-0"
-              >
-                <Download size={12} />
-                DESCARGAR PPTX
-              </button>
+              <span className="text-[10px] bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 px-3 py-1 rounded-full font-black uppercase tracking-wider">DIAPOSITIVAS READY</span>
+              <button onClick={handleDownloadPPT} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-black px-4 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer border-0"><Download size={14} /> DESCARGAR PPTX</button>
             </div>
           </div>
-          <div
-            className="ai-html-content text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-medium overflow-x-auto whitespace-pre-wrap"
-            dangerouslySetInnerHTML={{ __html: sanitizeHTML(resultado.ideas_presentacion || resultado.estructura_presentacion) }}
-          />
+
+          <PlataformasDiapositivasBar />
+
+          <div className="ai-html-content text-sm sm:text-base text-slate-800 dark:text-slate-200 leading-relaxed font-medium overflow-x-auto whitespace-pre-wrap space-y-4 p-2" dangerouslySetInnerHTML={{ __html: sanitizeHTML(formatMarkdownToHTML(resultado.ideas_presentacion || resultado.estructura_presentacion)) }} />
         </div>
       )}
 
-      {/* Tarjeta Contenido Principal (Fallback) */}
-      {resultado.contenido_principal && !resultado.plan_13_clases && (activeSection === 'todos' || activeSection === 'principal') && (
+      {/* Contenido Principal — vista individual */}
+      {resultado.contenido_principal && !resultado.plan_13_clases && activeSection === 'principal' && (
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm animate-pageIn space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <ClipboardList size={16} className="text-blue-600" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">Contenido Principal / Quiz / Tabla</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">
+                {isVideoResource ? "🎬 Guion Didáctico del Video" : "Contenido Principal / Quiz / Tabla"}
+              </span>
             </div>
-            {((customTipo && customTipo === 'Video Explicativo') || docTitle.toLowerCase().includes('video')) ? (
-              <button
-                onClick={() => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(docTitle + " tema educativo")}`, '_blank')}
-                className="text-[10px] font-bold text-red-600 hover:underline flex items-center gap-1 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200"
+            {isVideoResource ? (
+              <a
+                href={youtubeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-0 shadow-sm no-underline cursor-pointer"
               >
-                ▶ Buscar Video
-              </button>
+                <PlayCircle size={14} />
+                ▶️ Ver videos sugeridos en YouTube
+              </a>
             ) : (
-              <button
-                onClick={() => exportToWord(docTitle, resultado, showToast)}
-                className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200"
-              >
-                📄 Guardar en Word
-              </button>
+              <button onClick={() => exportToWord(docTitle, resultado, showToast)} className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">📄 Guardar en Word</button>
             )}
           </div>
-          <div
-            className="ai-html-content text-xs text-slate-700 leading-relaxed font-medium overflow-x-auto"
-            dangerouslySetInnerHTML={{ __html: sanitizeHTML(resultado.contenido_principal) }}
-          />
+          <div className="ai-html-content text-sm text-slate-700 leading-relaxed font-medium overflow-x-auto" dangerouslySetInnerHTML={{ __html: sanitizeHTML(resultado.contenido_principal) }} />
         </div>
       )}
 
-      {/* Tarjeta Recursos Online y Canal de Juegos */}
-      {resultado.recursos_online && (activeSection === 'todos' || activeSection === 'juegos') && (
-        <div className="bg-sky-50/50 p-5 rounded-2xl border border-sky-100/60 space-y-3 animate-pageIn">
+      {/* Recursos Online — vista individual */}
+      {resultado.recursos_online && activeSection === 'juegos' && (
+        <div className="bg-sky-50/50 dark:bg-slate-800 p-6 rounded-3xl border border-sky-100/60 dark:border-slate-700 space-y-4 animate-pageIn">
           <div className="flex items-center gap-2">
-            <Globe size={16} className="text-sky-600" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-sky-600">Recursos Online y Juegos Interactivos</span>
+            <Globe size={18} className="text-sky-600 dark:text-sky-400" />
+            <span className="text-xs font-black uppercase tracking-widest text-sky-600 dark:text-sky-400">🎮 Recursos Online y Juegos Interactivos</span>
           </div>
-          <div
-            className="ai-html-content text-xs text-slate-700 leading-relaxed font-medium"
-            dangerouslySetInnerHTML={{ __html: sanitizeHTML(resultado.recursos_online) }}
-          />
+          <RecursosOnlineDinamicos recursos={resultado.recursos_online} />
           <PlataformasJuegosBar onLaunchGame={onLaunchGame} />
         </div>
       )}
 
-      {/* Tarjeta Adaptación Inclusiva */}
-      {resultado.adaptacion_inclusiva && (activeSection === 'todos' || activeSection === 'inclusivo') && (
+      {/* Adaptación Inclusiva — vista individual */}
+      {resultado.adaptacion_inclusiva && activeSection === 'inclusivo' && (
         <div className="bg-violet-50/50 p-5 rounded-2xl border border-violet-100/60 animate-pageIn">
           <div className="flex items-center gap-2 mb-3">
             <Lightbulb size={16} className="text-violet-600" />
             <span className="text-[10px] font-black uppercase tracking-widest text-violet-600">Adaptación Inclusiva (PIAR / DUA)</span>
           </div>
-          <div
-            className="ai-html-content text-xs text-slate-700 leading-relaxed font-medium"
-            dangerouslySetInnerHTML={{ __html: sanitizeHTML(resultado.adaptacion_inclusiva) }}
-          />
+          <div className="ai-html-content text-sm text-slate-700 leading-relaxed font-medium" dangerouslySetInnerHTML={{ __html: sanitizeHTML(resultado.adaptacion_inclusiva) }} />
         </div>
       )}
 
-      {/* Tarjeta 5: Guía Docente */}
-      {resultado.guia_docente && (activeSection === 'todos' || activeSection === 'guia') && (
+      {/* Guía Docente — vista individual */}
+      {resultado.guia_docente && activeSection === 'guia' && (
         <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100/60 animate-pageIn">
           <div className="flex items-center gap-2 mb-3">
             <GraduationCap size={16} className="text-emerald-600" />
             <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Guía para el Docente</span>
           </div>
-          <div
-            className="ai-html-content text-xs text-slate-700 leading-relaxed font-medium"
-            dangerouslySetInnerHTML={{ __html: sanitizeHTML(resultado.guia_docente) }}
-          />
+          <div className="ai-html-content text-sm text-slate-700 leading-relaxed font-medium" dangerouslySetInnerHTML={{ __html: sanitizeHTML(resultado.guia_docente) }} />
         </div>
       )}
 
@@ -1718,31 +2678,70 @@ const ResultadoIACards = ({ resultado, onReset, onClose, showToast, onLaunchGame
         >
           ← Generar Otro
         </button>
-        {((customTipo && customTipo === 'Video Explicativo') || docTitle.toLowerCase().includes('video')) ? (
-          <button
-            onClick={() => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(docTitle + " tema educativo")}`, '_blank')}
-            className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 border-0"
-          >
-            <PlayCircle size={16} />
-            Buscar Video en YouTube
-          </button>
-        ) : (
+        {isSlideResource ? (
           <>
             <button
-              onClick={() => exportToWord(docTitle, resultado, showToast)}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 border-0"
-            >
-              <FileText size={15} />
-              Descargar Word (.doc)
-            </button>
-            <button
               onClick={handleDownloadPPT}
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 border-0"
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 border-0"
             >
               <Presentation size={15} />
-              Descargar PPT
+              Descargar PowerPoint (.pptx)
+            </button>
+            <a
+              href="https://www.canva.com/presentations/templates/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 no-underline text-center border-0"
+            >
+              🎨 Diseñar en Canva ↗
+            </a>
+          </>
+        ) : isVideoResource ? (
+          <>
+            <a
+              href={youtubeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 no-underline text-center border-0"
+            >
+              <PlayCircle size={16} />
+              ▶️ Ver Video del Tema en YouTube
+            </a>
+            <button
+              onClick={() => exportToWord(docTitle, resultado, showToast)}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 border-0"
+            >
+              <FileText size={15} />
+              Guardar Guion en Word (.docx)
             </button>
           </>
+        ) : isGameResource ? (
+          <>
+            <a
+              href={recommendedGameUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 no-underline text-center border-0"
+            >
+              <span className="text-base">{recommendedApp.icon}</span>
+              Abrir {recommendedApp.name} ↗
+            </a>
+            <button
+              onClick={() => exportToWord(docTitle, resultado, showToast)}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 border-0"
+            >
+              <FileText size={15} />
+              Guardar Juego en Word (.docx)
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => exportToWord(docTitle, resultado, showToast)}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-md flex items-center justify-center gap-2 border-0"
+          >
+            <FileText size={15} />
+            Guardar en Word (.docx)
+          </button>
         )}
         <button
           onClick={onClose}
@@ -1755,33 +2754,12 @@ const ResultadoIACards = ({ resultado, onReset, onClose, showToast, onLaunchGame
   );
 };
 
-const formatMarkdownToHTML = (text) => {
-  if (!text) return '';
-  if (text.trim().startsWith('<') && text.includes('</')) {
-    return text;
-  }
 
-  let html = String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/^### (.*$)/gim, '<h3 style="font-size: 15px; font-weight: 800; color: #4338ca; margin: 18px 0 10px 0; border-bottom: 2px solid #e0e7ff; padding-bottom: 6px;">$1</h3>')
-    .replace(/^#### (.*$)/gim, '<h4 style="font-size: 13px; font-weight: 700; color: #1e293b; margin: 14px 0 6px 0;">$1</h4>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #0f172a;">$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid #6366f1; background-color: #f8fafc; padding: 10px 14px; margin: 12px 0; border-radius: 0 10px 10px 0; font-style: italic; color: #334155;">$1</blockquote>')
-    .replace(/^- (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: #334155;">$1</li>')
-    .replace(/\[ \]/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 4px; vertical-align: middle; margin-right: 6px;"></span>')
-    .replace(/\(   \)/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 50%; vertical-align: middle; margin-right: 6px;"></span>')
-    .replace(/\n\n/g, '<div style="height: 12px;"></div>')
-    .replace(/\n/g, '<br/>');
-
-  return html;
-};
 
 // Fallback de texto libre
 const ResultadoTextoLibre = ({ texto, onReset, onClose, showToast, customTipo }) => {
-  const isVideo = customTipo === 'Video Explicativo';
+  const isVideo = Boolean(customTipo === 'Video Explicativo' || (texto && (texto.toLowerCase().includes('guion') || texto.toLowerCase().includes('video'))));
+  const fallbackYtUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent((customTipo || 'video educativo').replace(/video/gi, '').trim() + " explicacion clase")}`;
   
   return (
     <div className="space-y-4 animate-pageIn">
@@ -1791,13 +2769,15 @@ const ResultadoTextoLibre = ({ texto, onReset, onClose, showToast, customTipo })
           ✅ Contenido Generado
         </span>
         {isVideo ? (
-          <button
-            onClick={() => window.open(`https://www.youtube.com/results?search_query=Video Educativo`, '_blank')}
-            className="bg-red-600 hover:bg-red-700 text-white text-xs font-black px-4 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer border-0"
+          <a
+            href={fallbackYtUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-red-600 hover:bg-red-700 text-white text-xs font-black px-4 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer no-underline border-0"
           >
             <PlayCircle size={15} />
-            ▶ Buscar Video en YouTube
-          </button>
+            ▶️ Ver videos sugeridos en YouTube
+          </a>
         ) : (
           <button
             onClick={() => exportToWord("Recurso_EDUDOCENT", texto, showToast)}
@@ -1817,7 +2797,15 @@ const ResultadoTextoLibre = ({ texto, onReset, onClose, showToast, customTipo })
       <div className="flex gap-3 pt-2">
         <button onClick={onReset} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer border-0">← Regenerar</button>
         {isVideo ? (
-          <button onClick={() => window.open(`https://www.youtube.com/results?search_query=Video Educativo`, '_blank')} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase flex justify-center items-center gap-1.5 border-0"><PlayCircle size={16} /> Buscar Video</button>
+          <a
+            href={fallbackYtUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase flex justify-center items-center gap-1.5 border-0 no-underline shadow-md"
+          >
+            <PlayCircle size={16} />
+            ▶️ Ver videos sugeridos en YouTube
+          </a>
         ) : (
           <button onClick={() => exportToWord("Recurso_EDUDOCENT", texto, showToast)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-black text-xs uppercase flex justify-center items-center gap-1.5 border-0"><FileText size={16} /> Descargar Word</button>
         )}
@@ -1862,10 +2850,16 @@ const PlanDeClaseModal = ({
     const gradoSeleccionado = `${grado}°`;
     const periodoSeleccionado = `Periodo ${periodo}`;
     const necesidad = recurso?.customTipo || tipoRecurso;
-    const temaEspecifico = recurso?.titulo || recurso?.tema || 'Tema del Periodo';
-    const textoTextarea = instruccionesExtra || `Generar ${necesidad} específico sobre el tema: "${temaEspecifico}"`;
+    const temaDeLaSemanaSeleccionada = recurso?.tema || recurso?.titulo || recurso?.subtemas?.[0] || 'Tema del Periodo';
+    const textoTextarea = instruccionesExtra ? instruccionesExtra.trim() : '';
 
-    let promptFinal = `Materia: ${materiaActual} | Grado: ${gradoSeleccionado} | Periodo: ${periodoSeleccionado} | Necesidad: ${necesidad} | Tema Específico: ${temaEspecifico} | Instrucciones: ${textoTextarea}`;
+    let promptFinal = `ASIGNATURA: ${materiaActual} | GRADO: ${gradoSeleccionado} | PERIODO: ${periodoSeleccionado} | RECURSO A GENERAR: ${necesidad} | TEMA ESPECÍFICO: "${temaDeLaSemanaSeleccionada}"`;
+
+    if (textoTextarea) {
+      promptFinal += `\n\n🚨 INSTRUCCIONES ESPECÍFICAS Y OBLIGATORIAS DEL DOCENTE (DEBES CUMPLIRLAS EXACTAMENTE AL 100% Y TIENEN MÁXIMA PRIORIDAD):\n"${textoTextarea}"\n(Si el docente solicitó un número o tipo de preguntas determinado, como selección múltiple con opciones A, B, C, D o preguntas abiertas, o formato específico, GENERA EXACTAMENTE ESA CANTIDAD Y ESTRUCTURA SIN OMITIR NADA).`;
+    } else {
+      promptFinal += `\n\nGenerar ${necesidad} completo, didáctico y estructurado para usar en el aula sobre el tema: "${temaDeLaSemanaSeleccionada}".`;
+    }
 
     if (documentoBaseTexto) {
       promptFinal += ` | DOCUMENTO BASE PROPORCIONADO POR EL DOCENTE: (BASA TU RESPUESTA ESTRICTAMENTE EN ESTE DOCUMENTO)
@@ -1885,21 +2879,29 @@ ${documentoBaseTexto}
 
       const rawText = await callGeminiAPI(promptFinal, targetSystemPrompt, apiKey);
       if (!rawText) {
-        setError('La IA no devolvió una respuesta. Verifica tu conexión e intenta de nuevo.');
-        setIsLoading(false);
+        setError('Error de conexión con la IA, por favor intenta de nuevo');
         return;
       }
 
       const parsed = tryParseJSON(rawText);
+      const metadata = {
+        _materia: materiaActual,
+        _grado: grado,
+        _periodo: periodo,
+        _tema: temaDeLaSemanaSeleccionada,
+        _tipo: necesidad
+      };
       if (parsed) {
-        setContenido(parsed);
+        setContenido({ ...parsed, ...metadata });
       } else {
-        setContenido({ _texto_libre: rawText });
+        setContenido({ _texto_libre: rawText, ...metadata });
       }
-    } catch {
-      setError('Error de conexión con el servidor de IA. Verifica tu red e intenta nuevamente.');
+    } catch (e) {
+      console.error("Fallo exacto en la IA:", e);
+      setError('Error de conexión con la IA, por favor intenta de nuevo');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleClose = () => {
@@ -1910,11 +2912,11 @@ ${documentoBaseTexto}
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 animate-pageIn">
-      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col relative">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-3 animate-pageIn">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-2xl max-w-7xl w-[90vw] max-h-[75vh] overflow-hidden flex flex-col relative notebook-pro-modal">
 
         {/* Header */}
-        <div className="px-6 pt-6 pb-4 border-b border-slate-100 bg-gradient-to-r from-rose-50 to-orange-50 shrink-0">
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-rose-50 to-orange-50 dark:from-slate-850 dark:to-slate-800 shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center">
@@ -1950,7 +2952,7 @@ ${documentoBaseTexto}
         </div>
 
         {/* Cuerpo del Modal */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto max-h-[75vh] p-6 space-y-5 custom-scrollbar bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
 
           {!contenido && !isLoading && (
             <>
@@ -2171,22 +3173,29 @@ const AdaptacionIAModal = ({
     try {
       const rawText = await callGeminiAPI(promptFinal, SYSTEM_PROMPT_AVANZADO, apiKey);
       if (!rawText) {
-        setError('La IA no devolvió una respuesta. Verifica tu conexión e intenta de nuevo.');
-        setIsLoading(false);
+        setError('Error de conexión con la IA, por favor intenta de nuevo');
         return;
       }
 
       const parsed = tryParseJSON(rawText);
+      const metadata = {
+        _materia: materiaActual,
+        _grado: grado,
+        _periodo: periodo,
+        _tema: recurso?.tema || recurso?.titulo,
+        _tipo: `Adaptación DUA (${necesidadLabel})`
+      };
       if (parsed) {
-        setResultado(parsed);
+        setResultado({ ...parsed, ...metadata });
       } else {
-        setResultado({ _texto_libre: rawText });
+        setResultado({ _texto_libre: rawText, ...metadata });
       }
-    } catch {
-      setError('Error de conexión con el servidor de IA. Verifica tu red e intenta nuevamente.');
+    } catch (e) {
+      console.error("Fallo exacto en la IA:", e);
+      setError('Error de conexión con la IA, por favor intenta de nuevo');
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   const handleClose = () => {
@@ -2198,11 +3207,11 @@ const AdaptacionIAModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 animate-pageIn">
-      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col relative">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-3 animate-pageIn">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-2xl max-w-7xl w-[90vw] max-h-[75vh] overflow-hidden flex flex-col relative notebook-pro-modal">
 
         {/* Header del Modal */}
-        <div className="px-6 pt-6 pb-4 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-indigo-50 shrink-0">
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-slate-850 dark:to-indigo-950/60 shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center">
@@ -2230,7 +3239,7 @@ const AdaptacionIAModal = ({
         </div>
 
         {/* Cuerpo del Modal */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto max-h-[75vh] p-6 space-y-5 custom-scrollbar bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
 
           {/* Formulario */}
           {!resultado && !isLoading && (
@@ -2496,7 +3505,7 @@ const NotebookView = ({
             <div className="flex items-center">
               <input 
                 type="file" 
-                accept=".txt,.csv,.md" 
+                accept=".txt,.csv,.md,.pdf" 
                 className="hidden" 
                 ref={fileInputRef} 
                 onChange={handleFileUpload} 
@@ -2603,7 +3612,11 @@ const NotebookView = ({
       {/* Sección especial si la pestaña activa es JUEGOS */}
       {selectedType === 'juegos' && (
         <div className="px-5 pt-2">
-          <PlataformasJuegosBar onLaunchGame={handleLaunchGame} />
+          <PlataformasJuegosBar
+            onLaunchGame={handleLaunchGame}
+            activeTopic={resources[activeTopicIndex]?.titulo || ''}
+            currentSubject={currentMateriaValue}
+          />
         </div>
       )}
 
@@ -2782,21 +3795,45 @@ const NotebookView = ({
                           </button>
                         )}
                         {selectedType === 'videos' && (
-                          <button
-                            onClick={() => handleOpenPlanModal('Video Explicativo', item)}
-                            className="flex items-center gap-2 p-3.5 rounded-2xl text-xs font-black bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/60 transition-all cursor-pointer border border-red-100 dark:border-red-800/40 active:scale-95"
-                          >
-                            <span className="text-sm">🎬</span> {t.genVideo}
-                          </button>
+                          <div className="col-span-1 sm:col-span-2 flex flex-col sm:flex-row gap-2">
+                            <a
+                              href={`https://www.youtube.com/results?search_query=${encodeURIComponent((item.titulo || item.tema || '').replace(/video/gi, '').trim() + ' ' + (item.materia || currentMateriaValue || '') + ' explicacion')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 flex items-center justify-center gap-2 p-3.5 rounded-2xl text-xs font-black bg-red-600 hover:bg-red-700 text-white transition-all cursor-pointer shadow-md shadow-red-200 dark:shadow-none active:scale-95 no-underline border-0"
+                            >
+                              <PlayCircle size={16} /> ▶️ Abrir Video del Tema en YouTube ↗
+                            </a>
+                            <button
+                              onClick={() => handleOpenPlanModal('Video Explicativo', item)}
+                              className="flex items-center justify-center gap-2 p-3.5 rounded-2xl text-xs font-black bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/60 transition-all cursor-pointer border border-red-100 dark:border-red-800/40 active:scale-95"
+                            >
+                              <span className="text-sm">🎬</span> {t.genVideo}
+                            </button>
+                          </div>
                         )}
-                        {selectedType === 'juegos' && (
-                          <button
-                            onClick={() => handleOpenPlanModal('Juego Interactivo Listo', item)}
-                            className="flex items-center gap-2 p-3.5 rounded-2xl text-xs font-black bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/60 transition-all cursor-pointer border border-sky-100 dark:border-sky-800/40 active:scale-95"
-                          >
-                            <span className="text-sm">🎮</span> {t.genGame}
-                          </button>
-                        )}
+                        {selectedType === 'juegos' && (() => {
+                          const appRec = getRecommendedGameApp(currentMateriaValue);
+                          const appUrl = getPlataformaSearchUrl(appRec.name, item.titulo || item.tema, currentMateriaValue);
+                          return (
+                            <div className="col-span-1 sm:col-span-2 flex flex-col sm:flex-row gap-2">
+                              <a
+                                href={appUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 flex items-center justify-center gap-2 p-3.5 rounded-2xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer shadow-md shadow-emerald-200 dark:shadow-none active:scale-95 no-underline border-0"
+                              >
+                                <span className="text-base">{appRec.icon}</span> Abrir en {appRec.name} (Recomendado) ↗
+                              </a>
+                              <button
+                                onClick={() => handleOpenPlanModal('Juego Interactivo Listo', item)}
+                                className="flex items-center justify-center gap-2 p-3.5 rounded-2xl text-xs font-black bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/60 transition-all cursor-pointer border border-sky-100 dark:border-sky-800/40 active:scale-95"
+                              >
+                                <span className="text-sm">🎮</span> {t.genGame}
+                              </button>
+                            </div>
+                          );
+                        })()}
                         {selectedType === 'mapas' && (
                           <button
                             onClick={() => handleOpenPlanModal('Organizador Gráfico', item)}

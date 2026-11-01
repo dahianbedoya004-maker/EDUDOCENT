@@ -1,6 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  AlignmentType
+} from 'docx';
 import {
   Mail, Instagram, Cloud, Facebook, User, BookOpen, MessageSquare,
   ChevronLeft, Send, Plus, Compass, Home, LogOut, FileText, Gamepad2,
@@ -109,10 +122,14 @@ const formatMarkdownToHTML = (text) => {
     .replace(/^##### (.*$)/gim, '<h5 style="font-size: 13px; font-weight: 700; color: #0284c7; margin: 12px 0 4px 0;">$1</h5>')
     .replace(/^#### (.*$)/gim, '<h4 style="font-size: 14px; font-weight: 700; color: #1e293b; margin: 14px 0 6px 0;">$1</h4>')
     .replace(/^### (.*$)/gim, '<h3 style="font-size: 15px; font-weight: 800; color: #4338ca; margin: 18px 0 10px 0; border-bottom: 2px solid #e0e7ff; padding-bottom: 6px;">$1</h3>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #0f172a; font-weight: bold;">$1</strong>')
+    .replace(/\[DIAPOSITIVA\s*(\d*|[^\]]*)\]/gi, '<div class="mt-6 mb-3 pt-3 border-t-2 border-amber-300 dark:border-amber-700/60 flex items-center gap-2"><span class="bg-amber-600 text-white text-[11px] font-black px-3 py-1 rounded-lg uppercase tracking-wider shadow-sm">🖥️ Diapositiva $1</span></div>')
+    .replace(/\[TITULO\]\s*(.*)/gi, '<div class="text-sm font-black text-amber-950 dark:text-amber-200 mt-2 mb-1"><span class="bg-amber-200 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 text-[10px] font-black px-2 py-0.5 rounded mr-1.5 uppercase">TÍTULO</span><strong>$1</strong></div>')
+    .replace(/\[CONTENIDO\]\s*(.*)/gi, '<div class="text-xs font-medium text-slate-700 dark:text-slate-200 mt-1 mb-2 leading-relaxed"><span class="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-[10px] font-bold px-2 py-0.5 rounded mr-1.5 uppercase">CONTENIDO</span>$1</div>')
+    .replace(/\[(OBJETIVO|ACTIVIDAD|DINÁMICA|RECURSO)\]\s*(.*)/gi, '<div class="text-xs font-medium text-slate-700 dark:text-slate-200 mt-1 mb-2 leading-relaxed"><span class="bg-indigo-100 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200 text-[10px] font-bold px-2 py-0.5 rounded mr-1.5 uppercase">$1</span>$2</div>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: 800;">$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid #6366f1; background-color: #f8fafc; padding: 10px 14px; margin: 12px 0; border-radius: 0 10px 10px 0; font-style: italic; color: #334155;">$1</blockquote>')
-    .replace(/^[*-] (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: #334155;">$1</li>')
+    .replace(/^[*-] (.*$)/gim, '<li style="margin: 4px 0 4px 18px; list-style-type: disc; color: inherit;">$1</li>')
     .replace(/\[ \]/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 4px; vertical-align: middle; margin-right: 6px;"></span>')
     .replace(/\(   \)/g, '<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 50%; vertical-align: middle; margin-right: 6px;"></span>')
     .replace(/\n\n+/g, '<div style="height: 12px;"></div>')
@@ -200,8 +217,8 @@ const GeneradorIAModal = ({ isOpen, onClose, onGenerate, title, isGenerating, se
 
   return (
     <div className="fixed inset-0 z-[600] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden animate-pageIn flex flex-col max-h-[90vh]">
-        <div className="p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden animate-pageIn flex flex-col max-h-[75vh] border border-slate-100 dark:border-slate-800">
+        <div className="p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <Sparkles size={24} className="text-yellow-300" />
             <div>
@@ -212,13 +229,13 @@ const GeneradorIAModal = ({ isOpen, onClose, onGenerate, title, isGenerating, se
           <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-xl transition-all cursor-pointer"><X size={20} /></button>
         </div>
 
-        <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
+        <div className="p-6 overflow-y-auto max-h-[75vh] custom-scrollbar flex-1 space-y-5 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
           {/* Selector de Grado en el Modal */}
           {selectedGrade && setSelectedGrade && (
-            <div className="space-y-2 bg-indigo-50/60 border border-indigo-100 p-4 rounded-2xl">
+            <div className="space-y-2 bg-indigo-50/60 dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 p-4 rounded-2xl">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-black uppercase text-indigo-900">{isEn ? 'Select Grade Level:' : 'Selecciona el Grado Académico:'}</label>
-                {targetSubjectName && <span className="text-[11px] font-black text-indigo-700 bg-white px-2.5 py-0.5 rounded-lg border border-indigo-200">{targetSubjectName}</span>}
+                <label className="text-xs font-black uppercase text-indigo-900 dark:text-indigo-300">{isEn ? 'Select Grade Level:' : 'Selecciona el Grado Académico:'}</label>
+                {targetSubjectName && <span className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-lg border border-indigo-200 dark:border-slate-700">{targetSubjectName}</span>}
               </div>
               <div className="flex items-center gap-1.5 pt-1">
                 {['6', '7', '8', '9', '10', '11'].map((g) => (
@@ -226,7 +243,7 @@ const GeneradorIAModal = ({ isOpen, onClose, onGenerate, title, isGenerating, se
                     key={g}
                     onClick={() => setSelectedGrade(g)}
                     className={`flex-1 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                      selectedGrade === String(g) ? 'bg-indigo-600 text-white shadow-md scale-105' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                      selectedGrade === String(g) ? 'bg-indigo-600 text-white shadow-md scale-105' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                   >
                     {g}°
@@ -238,11 +255,11 @@ const GeneradorIAModal = ({ isOpen, onClose, onGenerate, title, isGenerating, se
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-black uppercase text-slate-500 ml-1">{isEn ? '1. Base Material (Optional)' : '1. Material Base (Opcional)'}</label>
-              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">{isEn ? 'Generate without uploading' : 'Puedes generar sin subir nada'}</span>
+              <label className="text-xs font-black uppercase text-slate-500 dark:text-slate-400 ml-1">{isEn ? '1. Base Material (Optional)' : '1. Material Base (Opcional)'}</label>
+              <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md">{isEn ? 'Generate without uploading' : 'Puedes generar sin subir nada'}</span>
             </div>
-            <div className="border-2 border-dashed border-slate-200 rounded-2xl p-5 bg-slate-50 text-center flex flex-col items-center justify-center gap-2 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all">
-              <input type="file" accept=".txt,.csv,.md" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+            <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-5 bg-slate-50 dark:bg-slate-850 text-center flex flex-col items-center justify-center gap-2 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all">
+              <input type="file" accept=".txt,.csv,.md,.pdf" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
 
               {!nombreDoc ? (
                 <>
@@ -2088,7 +2105,22 @@ const DesktopSidebar = ({ view, setView, activeTheme, userName, userAvatar, cust
 // ==========================================
 
 const App = () => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+  const [customApiKey, setCustomApiKey] = useState(() => {
+    try {
+      return localStorage.getItem('edudocent_gemini_api_key') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [apiKeyInput, setApiKeyInput] = useState(() => {
+    try {
+      return localStorage.getItem('edudocent_gemini_api_key') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [showApiKey, setShowApiKey] = useState(false);
+  const apiKey = customApiKey || import.meta.env.VITE_GEMINI_API_KEY || "";
 
   // Estados reactivos de vistas y autenticación
   const [view, setView] = useState('landing');
@@ -2097,7 +2129,8 @@ const App = () => {
   const [authMethod, setAuthMethod] = useState('');
   const [userName, setUserName] = useState('');
   const [formData, setFormData] = useState({ identifier: '', password: '', socialUser: '' });
-  const [error, setError] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Estados para Modal 2FA de PIN y visibilidad de contraseña
@@ -2163,14 +2196,23 @@ const App = () => {
   const [showMyInclusivePlanModal, setShowMyInclusivePlanModal] = useState(false);
   const [inclusiveAIResult, setInclusiveAIResult] = useState(null);
   const [isGeneratingInclusiveAI, setIsGeneratingInclusiveAI] = useState(false);
+  const isGeneratingTip = isGeneratingInclusiveAI;
+  const setIsGeneratingTip = setIsGeneratingInclusiveAI;
+  const guiaTipResult = inclusiveAIResult;
+  const setGuiaTipResult = setInclusiveAIResult;
 
   // DUA Inclusion Tool states (Conectado con materias del docente)
   const [duaSelectedConditions, setDuaSelectedConditions] = useState([]);
   const [duaSelectedSubject, setDuaSelectedSubject] = useState(null);
   const [duaViewMode, setDuaViewMode] = useState('selection'); // 'selection' | 'generator'
   const [duaTopic, setDuaTopic] = useState('');
-  const [duaGeneratedResult, setDuaGeneratedResult] = useState(null);
+  const [datosPaquete, setDatosPaquete] = useState(null);
+  const duaGeneratedResult = datosPaquete;
+  const setDuaGeneratedResult = setDatosPaquete;
+  const [duaRawError, setDuaRawError] = useState(null);
   const [isGeneratingDua, setIsGeneratingDua] = useState(false);
+  const [duaActiveResultTab, setDuaActiveResultTab] = useState('examen_adaptado');
+  const [duaResultViewMode, setDuaResultViewMode] = useState('tabs'); // 'tabs' | 'all'
 
   // Asignaturas y Grados
   const [selectedSubjects, setSelectedSubjects] = useState([]); // Materias seleccionadas en encuesta
@@ -2209,6 +2251,7 @@ const App = () => {
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef(null);
+  const chatSessionRef = useRef(null);
 
   // Control de voz
   const [isListening, setIsListening] = useState(false);
@@ -2284,134 +2327,269 @@ const App = () => {
     }
   };
 
-  const exportInclusivePlanToWord = (planItems, showToast) => {
+  const exportInclusivePlanToWord = async (planItems, showToast) => {
     if (!planItems || planItems.length === 0) {
       showToast("Añade primero recursos a tu plan para exportar", "warning");
       return;
     }
 
-    let bodyHTML = `
-      <div style="font-family: Arial, sans-serif; padding: 10px;">
-        <div style="background-color: #4f46e5; color: white; padding: 16px 20px; border-radius: 8px; margin-bottom: 20px;">
-          <h1 style="margin: 0; font-size: 20px;">EDUDOCENT — ${escapeHTML(language === 'en' ? 'Intellectual Support & Inclusion Plan' : 'Plan de Apoyo a la Discapacidad Intelectual')}</h1>
-          <p style="margin: 4px 0 0 0; font-size: 11px; opacity: 0.9;">${escapeHTML(language === 'en' ? 'Selected UDL strategies, curricular adaptations, and materials' : 'Estrategias, adaptaciones curriculares y materiales DUA seleccionados')}</p>
-        </div>
-        <h2 style="color: #1e293b; font-size: 16px; border-bottom: 2px solid #4f46e5; padding-bottom: 6px;">${escapeHTML(language === 'en' ? 'Saved Resources in Plan' : 'Recursos e Intervenciones Guardadas en el Plan')} (${planItems.length})</h2>
-    `;
+    try {
+      const docChildren = [
+        new Paragraph({
+          text: `EDUDOCENT — ${language === 'en' ? 'Intellectual Support & Inclusion Plan' : 'Plan de Apoyo a la Discapacidad Intelectual'}`,
+          heading: HeadingLevel.TITLE,
+          spacing: { after: 200 }
+        }),
+        new Paragraph({
+          text: language === 'en' ? 'Selected UDL strategies, curricular adaptations, and materials' : 'Estrategias, adaptaciones curriculares y materiales DUA seleccionados',
+          spacing: { after: 300 }
+        }),
+        new Paragraph({
+          text: `${language === 'en' ? 'Saved Resources in Plan' : 'Recursos e Intervenciones Guardadas en el Plan'} (${planItems.length})`,
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 200, after: 200 }
+        })
+      ];
 
-    planItems.forEach((res, idx) => {
-      bodyHTML += `
-        <div style="margin-top: 18px; padding: 15px; border: 1px solid #cbd5e1; border-radius: 8px; background-color: #f8fafc;">
-          <h3 style="color: #4f46e5; font-size: 14px; margin-top: 0;">${idx + 1}. ${escapeHTML(res.icon || '🤝')} ${escapeHTML(res.title)}</h3>
-          <p style="font-size: 11px; color: #64748b; font-weight: bold; margin-bottom: 6px;">${escapeHTML(language === 'en' ? 'Category' : 'Categoría')}: ${escapeHTML(res.category)}</p>
-          <p style="font-size: 12px; color: #334155; line-height: 1.5;"><strong>${escapeHTML(language === 'en' ? 'Description' : 'Descripción')}:</strong> ${escapeHTML(res.desc)}</p>
-          <p style="font-size: 12px; color: #334155; line-height: 1.5; margin-top: 6px;"><strong>${escapeHTML(language === 'en' ? 'Strategy' : 'Estrategia de Aplicación')}:</strong> ${escapeHTML(res.detail)}</p>
-        </div>
-      `;
-    });
+      planItems.forEach((res, idx) => {
+        docChildren.push(
+          new Paragraph({
+            text: `${idx + 1}. ${res.icon || '🤝'} ${res.title}`,
+            heading: HeadingLevel.HEADING_3,
+            spacing: { before: 200, after: 100 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${language === 'en' ? 'Category' : 'Categoría'}: `, bold: true }),
+              new TextRun({ text: res.category || '' })
+            ],
+            spacing: { after: 80 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${language === 'en' ? 'Description' : 'Descripción'}: `, bold: true }),
+              new TextRun({ text: res.desc || '' })
+            ],
+            spacing: { after: 80 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${language === 'en' ? 'Strategy' : 'Estrategia de Aplicación'}: `, bold: true }),
+              new TextRun({ text: res.detail || '' })
+            ],
+            spacing: { after: 200 }
+          })
+        );
+      });
 
-    bodyHTML += `
-        <hr style="border: none; border-top: 1px dashed #cbd5e1; margin-top: 30px;" />
-        <p style="font-size: 10px; color: #94a3b8; text-align: center;">Generado por EDUDOCENT — Plataforma de Copiloto Docente e Inclusión Educativa</p>
-      </div>
-    `;
+      docChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "Generado por EDUDOCENT — Plataforma de Copiloto Docente e Inclusión Educativa",
+              italics: true,
+              color: "888888",
+              size: 18
+            })
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 400 }
+        })
+      );
 
-    const wordContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <meta charset='utf-8'>
-        <title>Plan_Inclusivo_EDUDOCENT</title>
-      </head>
-      <body>
-        ${bodyHTML}
-      </body>
-      </html>
-    `;
+      const doc = new Document({
+        sections: [{ properties: {}, children: docChildren }]
+      });
 
-    const blob = new Blob(['\ufeff' + wordContent], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `plan_inclusivo_edudocent.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `plan_inclusivo_edudocent.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
-    showToast(language === 'en' ? "📄 Inclusive Plan exported to Word successfully" : "📄 Plan Inclusivo exportado a Word exitosamente", "success");
+      showToast(language === 'en' ? "📄 Inclusive plan exported to Word (.docx) successfully" : "📄 Plan inclusivo exportado a Word (.docx) con éxito", "success");
+    } catch (err) {
+      console.error("Error exportando plan inclusivo a Word:", err);
+      showToast(language === 'en' ? "⚠️ Error exporting inclusive plan" : "⚠️ Error al exportar plan inclusivo", "error");
+    }
   };
 
-  const handleGenerateInclusiveAI = async (resource) => {
+  const exportTipGuideToWord = async (resource, aiGuideText) => {
+    if (!resource) return;
+    try {
+      const titleClean = (resource.title || 'Tip DUA').replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ _-]/g, '');
+      const docChildren = [
+        new Paragraph({
+          text: `EDUDOCENT — ${resource.title || 'Guía DUA'}`,
+          heading: HeadingLevel.TITLE,
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 }
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: `${language === 'en' ? 'Category' : 'Categoría'}: `, bold: true, color: "4F46E5" }),
+            new TextRun({ text: resource.category || 'DUA / Inclusión' })
+          ],
+          spacing: { after: 100 }
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: `${language === 'en' ? 'Description' : 'Descripción'}: `, bold: true }),
+            new TextRun({ text: resource.desc || '' })
+          ],
+          spacing: { after: 100 }
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: `${language === 'en' ? 'Pedagogical Strategy' : 'Estrategia Pedagógica'}: `, bold: true }),
+            new TextRun({ text: resource.detail || '' })
+          ],
+          spacing: { after: 200 }
+        })
+      ];
+
+      if (aiGuideText) {
+        docChildren.push(
+          new Paragraph({
+            text: language === 'en' ? 'AI Practical Implementation Guide' : 'Guía Práctica de Implementación en el Aula (IA)',
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 240, after: 120 }
+          })
+        );
+        aiGuideText.split('\n').forEach(line => {
+          const trimmed = line.trim();
+          if (trimmed) {
+            if (trimmed.startsWith('#')) {
+              docChildren.push(new Paragraph({
+                text: trimmed.replace(/^#+\s*/, ''),
+                heading: HeadingLevel.HEADING_3,
+                spacing: { before: 160, after: 80 }
+              }));
+            } else if (trimmed.startsWith('* ') || trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+              docChildren.push(new Paragraph({
+                children: [
+                  new TextRun({ text: '• ', bold: true }),
+                  new TextRun({ text: trimmed.replace(/^[*•-]\s*/, '') })
+                ],
+                spacing: { after: 80 }
+              }));
+            } else {
+              docChildren.push(new Paragraph({
+                text: trimmed,
+                spacing: { after: 100 }
+              }));
+            }
+          }
+        });
+      }
+
+      docChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "Generado por EDUDOCENT — Plataforma de Copiloto Docente e Inclusión Educativa",
+              italics: true,
+              color: "888888",
+              size: 18
+            })
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 400 }
+        })
+      );
+
+      const doc = new Document({
+        sections: [{ properties: {}, children: docChildren }]
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `guia_dua_${titleClean.toLowerCase().replace(/\s+/g, '_')}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast(language === 'en' ? "📄 Guide exported to Word (.docx) successfully" : "📄 Guía exportada a Word (.docx) con éxito", "success");
+    } catch (err) {
+      console.error("Error exportando guía a Word:", err);
+      showToast(language === 'en' ? "⚠️ Error exporting guide to Word" : "⚠️ Error al exportar guía a Word", "error");
+    }
+  };
+
+  const generarGuiaTip = async (resource) => {
+    const targetResource = resource || selectedInclusiveResource;
+    if (!targetResource) return;
+
     setIsGeneratingInclusiveAI(true);
     setInclusiveAIResult(null);
 
-    const systemPrompt = `Eres un experto en pedagogía inclusiva, DUA y PIAR. Genera una guía detallada de aplicación en el aula para la siguiente estrategia inclusiva. Responde en formato estructurado con viñetas y pasos recomendados.`;
-    const userPrompt = `Genera una guía práctica para implementar en el aula la estrategia inclusiva: "${resource.title}".
-Categoría: ${resource.category}.
-Descripción: ${resource.desc}.
-Detalles: ${resource.detail}.
+    const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || "";
 
-Proporciona:
-1. Instrucciones paso a paso para el profesor.
-2. Materiales necesarios o apoyos visuales.
-3. Indicadores de logro inclusivo.`;
+    if (!keyToUse) {
+      showToast('Error', 'Error de conexión con la IA, por favor intenta de nuevo', 'error');
+      setIsGeneratingInclusiveAI(false);
+      return;
+    }
 
-    const payload = {
-      contents: [{ parts: [{ text: userPrompt }] }],
-      systemInstruction: { parts: [{ text: systemPrompt }] }
-    };
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const tipName = targetResource.title || 'Estrategia DUA';
+    const systemPrompt = `Eres un experto en DUA. Desarrolla una guía práctica y aplicable paso a paso sobre cómo el docente debe implementar la estrategia ${tipName} en su aula. Entrega el resultado en Markdown puro, estructurado con viñetas y resaltados en negrita.`;
+    const userPrompt = `Desarrolla la guía paso a paso para la estrategia: "${tipName}".
+Detalles pedagógicos: ${targetResource.detail || targetResource.desc || ''}
 
-    const generateFallback = () => {
-      return `🎯 GUÍA PEDAGÓGICA Y DUA PARA EL AULA: ${resource.title.toUpperCase()}
+Proporciona de forma clara:
+1. Objetivo pedagógico y ajuste razonable (DUA / PIAR)
+2. Paso a paso para aplicarla durante la clase
+3. Materiales o apoyos visuales recomendados
+4. Consejos para estudiantes con TDAH, Dislexia o Autismo`;
 
-📌 CATEGORÍA: ${resource.category}
-📝 OBJETIVO PRINCIPAL: ${resource.desc}
-💡 ESTRATEGIA PEDAGÓGICA: ${resource.detail}
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Error de conexión con la IA, por favor intenta de nuevo')), 60000)
+    );
 
-1. INSTRUCCIONES PASO A PASO PARA EL DOCENTE:
-  • Fase 1 (Anticipación y Estructuración):
-    - Presenta la estrategia en el tablero usando apoyos visuales claros e iconos de representación simple.
-    - Orienta verbalmente a los estudiantes utilizando oraciones cortas y directas (Sujeto + Verbo + Predicado).
+    const apiPromise = (async () => {
+      const genAI = new GoogleGenerativeAI(keyToUse);
+      const candidateModels = ["gemini-1.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite"];
+      let lastError = null;
 
-  • Fase 2 (Desarrollo Accesible y Práctico):
-    - Implementa "${resource.title}" en micropasos de 5 a 10 minutos con monitoreo cercano.
-    - Utiliza organizadores gráficos, fichas de trabajo en Lectura Fácil o dinámicas multisensoriales.
-    - Facilita descansos sensoriales y tiempos extendidos según la necesidad de cada estudiante.
-
-  • Fase 3 (Consolidación y Cierre):
-    - Verifica el aprendizaje mediante preguntas cualitativas y emparejamiento visual.
-    - Brinda refuerzo positivo enfocado en los logros individuales y la autonomía.
-
-🎨 MATERIALES Y APOYOS VISUALES RECOMENDADOS:
-  • Fichas impresas en fuente Arial / OpenDyslexic (14pt) y contraste alto.
-  • Pictogramas de la rutina diaria y temporizadores visuales regulados.
-  • Materiales manipulativos e interactivos para trabajo colaborativo.
-
-📊 CRITERIOS DE EVALUACIÓN ADAPTATIVA (PIAR / DUA):
-  ✓ Muestra comprensión del concepto principal mediante representación oral, escrita o gráfica.
-  ✓ Participa activamente en la dinámica integrándose de forma asertiva.
-  ✓ Completa el 80% o más de las actividades adaptadas con acompañamiento pedagógico.`;
-    };
+      for (const modelName of candidateModels) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: systemPrompt,
+          });
+          const result = await model.generateContent(userPrompt);
+          const rawText = result?.response?.text();
+          if (rawText && rawText.trim().length > 10) {
+            return rawText;
+          }
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      throw lastError || new Error('Error de conexión con la IA, por favor intenta de nuevo');
+    })();
 
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawText && rawText.trim().length > 10) {
-        setInclusiveAIResult(rawText);
-      } else {
-        setInclusiveAIResult(generateFallback());
-      }
-    } catch {
-      setInclusiveAIResult(generateFallback());
+      const rawText = await Promise.race([apiPromise, timeoutPromise]);
+      setInclusiveAIResult(rawText);
+      showToast(language === 'en' ? '🎉 Practical guide generated successfully!' : '🎉 ¡Guía práctica generada con éxito!', 'success');
+    } catch (err) {
+      console.error("Fallo exacto en la IA:", err);
+      showToast('Error', 'Error de conexión con la IA, por favor intenta de nuevo', 'error');
+      setInclusiveAIResult(null);
+    } finally {
+      setIsGeneratingInclusiveAI(false);
     }
-    setIsGeneratingInclusiveAI(false);
   };
+
+  const handleGenerateInclusiveAI = generarGuiaTip;
 
   const toggleDuaCondition = (id) => {
     setDuaSelectedConditions(prev =>
@@ -2421,161 +2599,205 @@ Proporciona:
     );
   };
 
-  const handleGenerateDuaAI = async () => {
-    if (!duaTopic.trim()) {
-      showToast('Por favor escribe un tema o instrucción de la clase.', 'warning');
+  const safeStringifyResource = (val, fallback = '') => {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'string') {
+      return val.trim() || fallback;
+    }
+    if (Array.isArray(val)) {
+      if (val.length === 0) return fallback;
+      return val.map((item) => {
+        if (typeof item === 'object' && item !== null) {
+          return Object.entries(item).map(([k, v]) => `• **${k}**: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n');
+        }
+        return `• ${String(item)}`;
+      }).join('\n\n');
+    }
+    if (typeof val === 'object') {
+      const entries = Object.entries(val);
+      if (entries.length === 0) return fallback;
+      return entries.map(([k, v]) => {
+        if (typeof v === 'object' && v !== null) {
+          return `### ${k}\n${JSON.stringify(v, null, 2)}`;
+        }
+        return `• **${k}**: ${v}`;
+      }).join('\n\n');
+    }
+    return String(val) || fallback;
+  };
+
+  const generarPaqueteDUA = async () => {
+    if (!duaTopic || !duaTopic.trim()) {
+      showToast(language === 'en' ? 'Please write the class topic first' : 'Por favor, escribe el tema de la clase primero', 'warning');
       return;
     }
 
     const availableSubs = selectedSubjects.length > 0 ? selectedSubjects : allSubjects;
     const activeSub = duaSelectedSubject || availableSubs[0];
     const activeConditions = getDuaInclusionData(language).filter(d => duaSelectedConditions.includes(d.id));
-    const conditionsStr = activeConditions.map(c => c.title).join(' + ') || (language === 'en' ? 'General UDL Inclusion' : 'Inclusión DUA General');
+    const condicionesSeleccionadas = activeConditions.length > 0
+      ? activeConditions.map(c => c.title)
+      : [language === 'en' ? 'General Inclusion / UDL' : 'Inclusión DUA General'];
+    const temaEscrito = duaTopic.trim();
 
     setIsGeneratingDua(true);
     setDuaGeneratedResult(null);
+    setDuaRawError(null);
 
-    const systemPrompt = language === 'en'
-      ? `You are a high-level specialist in Universal Design for Learning (UDL) and inclusive curricular adaptations (IEP) for school teachers. Your task is to generate a highly structured educational package for the teacher.
-Respond ONLY with a valid JSON object with keys "quiz", "game", "presentation", "evaluation".
-Do NOT include markdown code blocks or additional text outside the JSON.`
-      : `Eres un especialista de alto nivel en Diseño Universal para el Aprendizaje (DUA) y adaptaciones curriculares inclusivas (PIAR) para docentes escolares. Tu labor es generar un paquete educativo altamente estructurado para el docente.
-Responde ÚNICAMENTE con un objeto JSON válido con las claves "quiz", "game", "presentation", "evaluation".
-NO incluyas bloques de código markdown ni texto adicional fuera del JSON.`;
+    const isEn = language === 'en';
+    const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || "";
 
-    const userPrompt = language === 'en'
-      ? `Subject: ${t?.subjects?.[activeSub.name] || activeSub.name}
-Grade: ${selectedGrade}th
-Conditions & Educational Needs to adapt jointly: ${conditionsStr}
-Class Topic / Instruction: "${duaTopic}"
+    if (!keyToUse) {
+      showToast('Error', 'Error de conexión con la IA, por favor intenta de nuevo', 'error');
+      setIsGeneratingDua(false);
+      return;
+    }
 
-Generate 4 specific and practical adaptations in ENGLISH for the teacher:
-1. "quiz": An adapted Easy Reading Quiz (2 multiple choice questions with visual reasoning).
-2. "game": A recommendation for interactive web games or classroom dynamics with rules adapted to the selected conditions.
-3. "presentation": A visual slide sequence with regulated times, sensory breaks, and macrotypes.
-4. "evaluation": A flexible and formative rubric or evaluation method according to selected profiles.`
-      : `Materia: ${activeSub.name}
-Grado: ${selectedGrade}°
-Condiciones y Necesidades Educativas a adaptar conjuntamente: ${conditionsStr}
-Tema / Instrucción de la clase: "${duaTopic}"
+    const systemPrompt = `Eres un experto pedagogo en Diseño Universal para el Aprendizaje (DUA). Tu objetivo principal es adaptar el tema central a las necesidades educativas específicas (ej. TDAH, Autismo, Dislexia, Dificultades de Lectura) que el usuario indique, y entregar estrategias inclusivas, prácticas y aplicables en el aula. Tienes ESTRICTAMENTE PROHIBIDO dar resúmenes teóricos. Debes generar OBLIGATORIAMENTE un paquete de 6 recursos listos para usar en el aula, aplicando ajustes razonables (lenguaje sencillo, apoyo visual, tiempos cortos, pausas sensoriales), MÁS un arreglo de Tips DUA prácticos.
 
-Genera las siguientes 4 adaptaciones específicas y prácticas para el docente:
-1. "quiz": Un Quiz o cuestionario adaptado en formato de Lectura Fácil (2 preguntas con opciones múltiples y justificación visual de respuesta).
-2. "game": Una recomendación de dinámica lúdica o juego interactivo (ej. en Wordwall, Kahoot o dinámica en el aula) con reglas accesibles para las condiciones seleccionadas.
-3. "presentation": Una estructura y secuencia de diapositivas / apoyos visuales con tiempos regulados, descansos sensoriales y macrotipos.
-4. "evaluation": Una rúbrica o método de evaluación flexible y procesual acorde a los perfiles seleccionados.`;
+REGLA INQUEBRANTABLE: Tienes ESTRICTAMENTE PROHIBIDO utilizar comillas dobles internas (") dentro de tus textos o párrafos explicativos, ya que rompen la estructura del JSON. Usa únicamente comillas simples (') si necesitas citar algo.
 
-    const payload = {
-      contents: [{ parts: [{ text: userPrompt }] }],
-      systemInstruction: { parts: [{ text: systemPrompt }] }
-    };
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+Responde ÚNICAMENTE con un objeto JSON válido con esta estructura exacta:
+{
+"examen_adaptado": "Evaluación corta con preguntas literales y opciones claras.",
+"quiz_imprimible": "Cuestionario rápido de 3 a 5 preguntas con indicaciones para añadir apoyos visuales (pictogramas).",
+"juego_dinamica": "Actividad lúdica o dinámica sensorial adaptada a las condiciones seleccionadas, sin sobrecarga de estímulos.",
+"guion_video": "Guion corto para un video explicativo, detallando qué apoyos visuales y de audio usar para mantener la atención.",
+"estructura_diapositivas": "Esquema para Canva/PowerPoint de alto contraste, con máximo 15 palabras por lámina.",
+"organizador_grafico": "Mapa conceptual o cognitivo estructurado en jerarquías visuales simples y directas.",
+"tips_dua": ["Tip DUA práctico 1 aplicable directamente en el aula.", "Tip DUA práctico 2.", "Tip DUA práctico 3.", "Tip DUA práctico 4.", "Tip DUA práctico 5."]
+}
+IMPORTANTE: el campo 'tips_dua' debe ser OBLIGATORIAMENTE un arreglo JSON con exactamente 4 a 5 cadenas de texto (strings), cada una con una estrategia DUA concreta, accionable y breve. NUNCA debe ser un objeto, solo un arreglo de strings.`;
+
+    const userPrompt = `Tema central: ${temaEscrito} | Necesidades educativas a adaptar: ${condicionesSeleccionadas.join(', ')}`;
+
+    let textoRespuesta = '';
 
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const cleanJsonStr = rawText.replace(/\`\`\`json/gi, '').replace(/\`\`\`/gi, '').trim();
-      const parsed = JSON.parse(cleanJsonStr);
+      const genAI = new GoogleGenerativeAI(keyToUse);
+      const candidateModels = ["gemini-1.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite"];
+      let lastError = null;
+      let datosParsed = null;
 
-      const subTranslatedName = t?.subjects?.[activeSub.name] || activeSub.name;
-
-      setDuaGeneratedResult({
-        quiz: parsed.quiz || (language === 'en' ? `Adapted quiz for ${subTranslatedName} (${conditionsStr}).` : `Cuestionario adaptado para ${activeSub.name} (${conditionsStr}).`),
-        game: parsed.game || (language === 'en' ? `Interactive playful activity adapted for ${subTranslatedName}.` : `Actividad lúdica interactiva adaptada para ${activeSub.name}.`),
-        presentation: parsed.presentation || (language === 'en' ? `Accessible visual sequence for ${duaTopic}.` : `Secuencia accesible y visual para ${duaTopic}.`),
-        evaluation: parsed.evaluation || (language === 'en' ? `Flexible evaluation focused on progressive achievements.` : `Evaluación flexible centrada en logros progresivos.`)
-      });
-      showToast(language === 'en' ? '🎉 UDL package generated successfully!' : '🎉 ¡Paquete DUA generado con éxito!', 'success');
-    } catch {
-      const subTranslatedName = t?.subjects?.[activeSub.name] || activeSub.name;
-      if (language === 'en') {
-        setDuaGeneratedResult({
-          quiz: `1. What is the main concept of "${duaTopic}" in ${subTranslatedName}?\nA) Concrete option with visual support\nB) Simple step-by-step option\n\nSimultaneous adaptation for: ${conditionsStr}. Guided reading and oral reinforcement recommended.`,
-          game: `Matching Game on Wordwall / Interactive Wheel: "Who knows more about ${duaTopic}?". Structured with flexible turns, extended time, and visual supports adapted to ${conditionsStr}.`,
-          presentation: `4-Slide Sequence:\n1. Cover page with high contrast image and clear font.\n2. Core concept explained in 1 short sentence + pictogram.\n3. Practical daily life example.\n4. 3-minute active sensory break + Interactive closing.`,
-          evaluation: `Formative evaluation through visual portfolio, guided participation, and flexible rubric without speed penalty.`
-        });
-        showToast('✨ UDL package adapted for your class', 'success');
-      } else {
-        setDuaGeneratedResult({
-          quiz: `1. ¿Cuál es el concepto principal de "${duaTopic}" en ${activeSub.name}?\nA) Opción concreta con apoyo visual\nB) Opción sencilla paso a paso\n\nAdaptación simultánea para: ${conditionsStr}. Se recomienda lectura guiada y refuerzo oral.`,
-          game: `Dinámica de Emparejamiento en Wordwall / Ruleta interactiva: "¿Quién sabe más sobre ${duaTopic}?". Estructurado con turnos flexibles, tiempo extendido y apoyos visuales adaptados a ${conditionsStr}.`,
-          presentation: `Secuencia de 4 Diapositivas:\n1. Portada con imagen de alto contraste y tipografía clara.\n2. Idea central explicada en 1 frase corta y pictograma.\n3. Ejemplo práctico cotidiano.\n4. Pausa activa de 3 minutos + Cierre interactivo.`,
-          evaluation: `Evaluación formativa mediante portafolio visual, participación guiada y rúbrica flexible sin penalización por velocidad de respuesta.`
-        });
-        showToast('✨ Paquete DUA adaptado para tu clase', 'success');
+      for (const modelName of candidateModels) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: systemPrompt,
+            generationConfig: { responseMimeType: "application/json" }
+          });
+          const result = await model.generateContent(userPrompt);
+          const response = result?.response;
+          textoRespuesta = typeof response?.text === 'function' ? response.text() : (result?.response?.text() || '');
+          const textoLimpio = textoRespuesta.replace(/```json/gi, '').replace(/```/g, '').trim();
+          datosParsed = JSON.parse(textoLimpio);
+          if (datosParsed && typeof datosParsed === 'object') {
+            break;
+          }
+        } catch (modelErr) {
+          lastError = modelErr;
+          if (textoRespuesta) {
+            try {
+              const start = textoRespuesta.indexOf('{');
+              const end = textoRespuesta.lastIndexOf('}');
+              if (start !== -1 && end !== -1 && end > start) {
+                datosParsed = JSON.parse(textoRespuesta.substring(start, end + 1));
+                if (datosParsed && typeof datosParsed === 'object') {
+                  break;
+                }
+              }
+            } catch (_) {}
+          }
+        }
       }
+
+      if (!datosParsed || typeof datosParsed !== 'object') {
+        throw lastError || new Error('No se pudo procesar la respuesta de la IA');
+      }
+
+      setDuaGeneratedResult(datosParsed);
+      setDuaActiveResultTab('examen_adaptado');
+      showToast(isEn ? '🎉 6-Resource UDL package generated successfully!' : '🎉 ¡Paquete DUA de 6 recursos generado con éxito!', 'success');
+    } catch (err) {
+      console.error("Fallo exacto:", err, "Texto crudo:", textoRespuesta);
+      showToast('Error', 'Error al procesar la respuesta de la IA. Por favor intenta de nuevo.', 'error');
+      setDuaGeneratedResult(null);
+      if (textoRespuesta) {
+        setDuaRawError(textoRespuesta);
+      }
+    } finally {
+      setIsGeneratingDua(false);
     }
-    setIsGeneratingDua(false);
   };
 
-  const exportDuaPackageToWord = (result, topic, subject, conditions) => {
-    if (!result) return;
+  const handleGenerateDuaAI = generarPaqueteDUA;
+
+  const exportDuaPackageToWord = async (result, topic, subject, conditions) => {
+    if (!result || typeof result !== 'object') return;
     const condNames = conditions.map(id => getDuaInclusionData(language).find(c => c.id === id)?.title).filter(Boolean).join(', ') || (language === 'en' ? 'General Inclusion' : 'Inclusión General');
     const subName = t?.subjects?.[subject?.name] || subject?.name || 'Asignatura';
 
-    const bodyHTML = `
-      <div style="font-family: Arial, sans-serif; padding: 15px;">
-        <div style="background-color: #4f46e5; color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-          <h1 style="margin: 0; font-size: 22px;">EDUDOCENT — ${escapeHTML(language === 'en' ? 'UDL Adaptation Package' : 'Paquete de Adaptación DUA')}</h1>
-          <p style="margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;"><strong>${escapeHTML(language === 'en' ? 'Subject' : 'Materia')}:</strong> ${escapeHTML(subName)} | <strong>${escapeHTML(language === 'en' ? 'Adapted Conditions' : 'Condiciones Adaptadas')}:</strong> ${escapeHTML(condNames)}</p>
-          <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;"><strong>${escapeHTML(language === 'en' ? 'Topic' : 'Tema')}:</strong> ${escapeHTML(topic)}</p>
-        </div>
+    try {
+      const docChildren = [
+        new Paragraph({
+          text: `EDUDOCENT — ${language === 'en' ? 'UDL Inclusive Package (6 Resources)' : 'Paquete DUA Inclusivo (6 Recursos)'}`,
+          heading: HeadingLevel.TITLE,
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 }
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: `${language === 'en' ? 'Subject' : 'Materia'}: ${subName} | ${language === 'en' ? 'Topic' : 'Tema'}: ${topic}`, bold: true, color: "4F46E5" })
+          ],
+          spacing: { after: 120 }
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: `${language === 'en' ? 'Adapted Needs / Conditions' : 'Necesidades Adaptadas'}: ${condNames}`, italics: true, color: "64748B" })
+          ],
+          spacing: { after: 300 }
+        })
+      ];
 
-        <div style="margin-top: 20px; padding: 15px; border-left: 4px solid #3b82f6; background-color: #f8fafc; border-radius: 6px;">
-          <h3 style="color: #1e40af; margin-top: 0;">📝 ${escapeHTML(language === 'en' ? '1. Adapted Quiz (Easy Reading)' : '1. Quiz Adaptado (Lectura Fácil)')}</h3>
-          <div style="line-height: 1.6; color: #334155;">${formatMarkdownToHTML(result.quiz)}</div>
-        </div>
+      const sections = [
+        { key: 'examen_adaptado', title: language === 'en' ? '1. Adapted Exam (Short assessment & clear options)' : '1. Examen Adaptado (Evaluación corta con opciones claras)' },
+        { key: 'quiz_imprimible', title: language === 'en' ? '2. Printable Quiz (With visual aids & pictograms)' : '2. Quiz Imprimible (3-5 preguntas con pictogramas/apoyos visuales)' },
+        { key: 'juego_dinamica', title: language === 'en' ? '3. Playful Activity & Sensory Dynamic' : '3. Juego o Dinámica Sensorial (Sin sobrecarga de estímulos)' },
+        { key: 'guion_video', title: language === 'en' ? '4. Explanatory Video Script (Visual & Audio Focus)' : '4. Guion de Video Explicativo (Apoyos visuales y de audio)' },
+        { key: 'estructura_diapositivas', title: language === 'en' ? '5. Slide Deck Structure (Canva/PPT High Contrast)' : '5. Estructura para Diapositivas Canva/PowerPoint (Alto contraste)' },
+        { key: 'organizador_grafico', title: language === 'en' ? '6. Graphic Organizer / Cognitive Map' : '6. Organizador Gráfico / Mapa Cognitivo (Jerarquías directas)' },
+      ];
 
-        <div style="margin-top: 20px; padding: 15px; border-left: 4px solid #f97316; background-color: #f8fafc; border-radius: 6px;">
-          <h3 style="color: #c2410c; margin-top: 0;">🎮 ${escapeHTML(language === 'en' ? '2. Web Game / Interactive Activity' : '2. Recomendación de Juego Web / Actividad Lúdica')}</h3>
-          <div style="line-height: 1.6; color: #334155;">${formatMarkdownToHTML(result.game)}</div>
-        </div>
+      sections.forEach(({ key, title }) => {
+        const textContent = safeStringifyResource(result?.[key], '');
+        if (textContent) {
+          docChildren.push(
+            new Paragraph({ text: title, heading: HeadingLevel.HEADING_2, spacing: { before: 240, after: 100 } })
+          );
+          textContent.split('\n').filter(Boolean).forEach(line => {
+            docChildren.push(new Paragraph({ text: line.trim(), spacing: { after: 80 } }));
+          });
+        }
+      });
 
-        <div style="margin-top: 20px; padding: 15px; border-left: 4px solid #a855f7; background-color: #f8fafc; border-radius: 6px;">
-          <h3 style="color: #7e22ce; margin-top: 0;">🖥️ ${escapeHTML(language === 'en' ? '3. Slide Structure & Visual Sequence' : '3. Estructura para Diapositivas y Apoyos Visuales')}</h3>
-          <div style="line-height: 1.6; color: #334155;">${formatMarkdownToHTML(result.presentation)}</div>
-        </div>
+      const doc = new Document({
+        sections: [{ properties: {}, children: docChildren }]
+      });
 
-        ${result.evaluation ? `
-        <div style="margin-top: 20px; padding: 15px; border-left: 4px solid #10b981; background-color: #f8fafc; border-radius: 6px;">
-          <h3 style="color: #047857; margin-top: 0;">📊 ${escapeHTML(language === 'en' ? '4. Flexible & Formative Assessment' : '4. Evaluación Flexible y Formativa')}</h3>
-          <div style="line-height: 1.6; color: #334155;">${formatMarkdownToHTML(result.evaluation)}</div>
-        </div>` : ''}
-
-        <hr style="border: none; border-top: 1px dashed #cbd5e1; margin-top: 30px;" />
-        <p style="font-size: 11px; color: #94a3b8; text-align: center;">Generado por EDUDOCENT — Herramienta de Inclusión DUA para Docentes</p>
-      </div>
-    `;
-
-    const wordContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <meta charset='utf-8'>
-        <title>Paquete_DUA_${subName}</title>
-      </head>
-      <body>
-        ${bodyHTML}
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(['\ufeff' + wordContent], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `paquete_dua_${subName.toLowerCase().replace(/\s+/g, '_')}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    showToast("📄 Paquete DUA exportado a Word (.doc) con éxito", "success");
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `paquete_dua_6_recursos_${subName.toLowerCase().replace(/\s+/g, '_')}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(language === 'en' ? "📄 6-Resource UDL Package exported to Word (.docx) successfully" : "📄 Paquete DUA de 6 Recursos exportado a Word (.docx) con éxito", "success");
+    } catch (err) {
+      console.error("Error exportando paquete DUA a Word:", err);
+      showToast(language === 'en' ? "⚠️ Error exporting UDL package" : "⚠️ Error al exportar paquete DUA", "error");
+    }
   };
 
   const generateFallbackMalla = (subjectName, grade = "6", periodo = 1, instrucciones = "") => {
@@ -2753,32 +2975,104 @@ Genera las siguientes 4 adaptaciones específicas y prácticas para el docente:
     const key = `${subjName}_g${selectedGrade}`;
     const contextoAdicional = `Materia: ${subjName} | Periodo: ${mallaTab} | Grado: ${selectedGrade}°`;
 
+    const applyFallbackMalla = () => {
+      const fallbackText = generarMallaCurricularLocal(subjName, selectedGrade, mallaTab, instrucciones);
+      setMallaData(prev => ({
+        ...prev,
+        [key]: {
+          ...(prev[key] || {}),
+          [`p${mallaTab}`]: fallbackText
+        }
+      }));
+      setIsGeneradorModalOpen(false);
+      showToast('Éxito', `Malla curricular para ${subjName} (Grado ${selectedGrade}°) generada con éxito.`, 'success');
+    };
+
+    const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY;
+
+    if (!keyToUse) {
+      showToast('Error', 'Error de conexión con la IA, por favor intenta de nuevo', 'error');
+      setIsGeneratingInclusiveAI(false);
+      return;
+    }
+
     let userPrompt;
     let systemPrompt;
 
     if (!documentoBase && !instrucciones) {
-      userPrompt = `Materia y Periodo: ${contextoAdicional}. Genera una Malla Curricular específica para la asignatura de ${subjName} en el periodo ${mallaTab} para Grado ${selectedGrade}°, creando temas, estándares y DBA desde cero de acuerdo a los lineamientos educativos oficiales.`;
-      systemPrompt = `Eres un coordinador académico experto. Tu misión es aligerar la carga del docente. Crea una Malla Curricular completa desde cero para la materia especificada. Responde ÚNICAMENTE con un JSON: { "estandares": "...", "dba": "...", "temas": ["..."] }. No incluyas markdown ni nada más, solo JSON válido.`;
+      userPrompt = `Materia y Periodo: ${contextoAdicional}. Genera una Malla Curricular EXHAUSTIVA y PROFESIONAL para la asignatura de ${subjName} en el periodo ${mallaTab} para Grado ${selectedGrade}°, creando temas detallados, estándares curriculares oficiales MEN, Derechos Básicos de Aprendizaje (DBA) reales y competencias desde cero.`;
+      systemPrompt = `Eres un coordinador académico experto en lineamientos del MEN (Ministerio de Educación Nacional de Colombia).
+Tu misión es generar una Malla Curricular EXHAUSTIVA y profesional que alivie la carga docente.
+
+REGLA ESTRICTA PARA TÍTULOS: El título generado debe ser completo, académico y descriptivo. Tienes estrictamente prohibido limitarte a repetir la materia y el grado. DEBES incluir el tema central, habilidad o eje temático que se va a enseñar.
+Si el usuario pide una Malla Curricular, el campo del título debe seguir este formato exacto: Malla Curricular Integral: [Materia] - Grado [X] - Periodo [Y] | Eje Temático: [Nombre del Tema].
+
+REGLAS OBLIGATORIAS:
+1. REGLA INQUEBRANTABLE: Tienes ESTRICTAMENTE PROHIBIDO utilizar comillas dobles internas (") dentro de tus textos o párrafos explicativos, ya que rompen la estructura del JSON. Usa únicamente comillas simples (') si necesitas citar algo.
+2. Los "estandares" deben ser ESPECÍFICOS al grado y materia, referenciando los lineamientos oficiales del MEN colombiano. NO uses estándares genéricos.
+3. Los "dba" deben ser los que corresponden OFICIALMENTE al grado solicitado, con su número de DBA real cuando sea posible.
+4. Los "ejes_tematicos" deben listar entre 6 y 10 temas CONCRETOS con subtemas detallados. La complejidad debe estar adaptada al grado y periodo.
+5. Adapta la complejidad del lenguaje EXACTAMENTE al grado seleccionado (6° usa lenguaje introductorio, 11° usa lenguaje preuniversitario).
+6. Incluye "competencias" que se desarrollan en este periodo.
+7. Incluye "indicadores_logro" esperados al finalizar el periodo.
+
+Responde ÚNICAMENTE con un JSON válido con esta estructura EXACTA (sin markdown, sin texto adicional):
+{ "titulo": "Malla Curricular Integral: [Materia] - Grado [X] - Periodo [Y] | Eje Temático: [Nombre del Tema]", "estandares": "Texto detallado...", "dba": "Texto detallado...", "ejes_tematicos": ["Eje 1: Subtema A, Subtema B", "Eje 2: ..."], "competencias": "...", "indicadores_logro": "..." }`;
     } else {
       userPrompt = `Material adjunto: ${documentoBase} | Instrucciones del profe: ${instrucciones} | Contexto: ${contextoAdicional}`;
-      systemPrompt = `Eres un coordinador académico experto. Tu misión es aligerar la carga del docente. Responde ÚNICAMENTE con un JSON: { "estandares": "...", "dba": "...", "temas": ["..."] }. No incluyas markdown ni nada más, solo JSON válido.`;
+      systemPrompt = `Eres un coordinador académico experto en lineamientos del MEN (Ministerio de Educación Nacional de Colombia).
+Tu misión es generar una Malla Curricular EXHAUSTIVA basada en el material del docente.
+
+REGLA ESTRICTA PARA TÍTULOS: El título generado debe ser completo, académico y descriptivo. Tienes estrictamente prohibido limitarte a repetir la materia y el grado. DEBES incluir el tema central, habilidad o eje temático que se va a enseñar.
+Si el usuario pide una Malla Curricular, el campo del título debe seguir este formato exacto: Malla Curricular Integral: [Materia] - Grado [X] - Periodo [Y] | Eje Temático: [Nombre del Tema].
+
+REGLAS:
+- REGLA INQUEBRANTABLE: Tienes ESTRICTAMENTE PROHIBIDO utilizar comillas dobles internas (") dentro de tus textos o párrafos explicativos, ya que rompen la estructura del JSON. Usa únicamente comillas simples (') si necesitas citar algo.
+- Los estándares y DBA deben ser oficiales del MEN para el grado indicado. Los ejes temáticos deben incluir entre 6 y 10 temas concretos.
+- Incluye competencias e indicadores de logro.
+
+Responde ÚNICAMENTE con un JSON válido: { "titulo": "Malla Curricular Integral: [Materia] - Grado [X] - Periodo [Y] | Eje Temático: [Nombre del Tema]", "estandares": "...", "dba": "...", "ejes_tematicos": ["..."], "competencias": "...", "indicadores_logro": "..." }. Sin markdown ni texto extra.`;
     }
 
-    const payload = {
-      contents: [{ parts: [{ text: userPrompt }] }],
-      systemInstruction: { parts: [{ text: systemPrompt }] }
-    };
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
     try {
-      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const result = await response.json();
-      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const cleanJsonStr = rawText.replace(/\`\`\`json/gi, '').replace(/\`\`\`/gi, '').trim();
+      const genAI = new GoogleGenerativeAI(keyToUse);
+      const candidateModels = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-1.5-flash"];
+      let result = null;
+      let lastError = null;
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout Gemini API')), 90000)
+      );
+
+      for (const modelName of candidateModels) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: systemPrompt,
+            generationConfig: { responseMimeType: "application/json" }
+          });
+          result = await Promise.race([
+            model.generateContent(userPrompt),
+            timeoutPromise
+          ]);
+          if (result) break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      if (!result) throw lastError || new Error('Error al conectar con la IA');
+
+      const rawText = result.response.text() || '';
+      const cleanJsonStr = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
       const parsedData = JSON.parse(cleanJsonStr);
 
-      const temasStr = Array.isArray(parsedData.temas) ? parsedData.temas.join(', ') : parsedData.temas;
-      const newMallaText = `1. Estándares (${subjName} - Grado ${selectedGrade}° - Periodo ${mallaTab}):\n${parsedData.estandares}\n\n2. Derechos Básicos de Aprendizaje (DBA):\n${parsedData.dba}\n\n3. Ejes Temáticos:\n${temasStr}`;
+      const temasArr = parsedData.ejes_tematicos || parsedData.temas || [];
+      const temasStr = Array.isArray(temasArr) ? temasArr.map((t, i) => `  ${i+1}. ${t}`).join('\n') : temasArr;
+      const competenciasStr = parsedData.competencias ? `\n\n4. Competencias del Periodo:\n${parsedData.competencias}` : '';
+      const indicadoresStr = parsedData.indicadores_logro ? `\n\n5. Indicadores de Logro:\n${parsedData.indicadores_logro}` : '';
+      const tituloHeader = parsedData.titulo ? `${parsedData.titulo}\n\n` : '';
+      const newMallaText = `${tituloHeader}1. Estándares Curriculares (${subjName} - Grado ${selectedGrade}° - Periodo ${mallaTab}):\n${parsedData.estandares}\n\n2. Derechos Básicos de Aprendizaje (DBA):\n${parsedData.dba}\n\n3. Ejes Temáticos:\n${temasStr}${competenciasStr}${indicadoresStr}`;
 
       setMallaData(prev => ({
         ...prev,
@@ -2789,20 +3083,13 @@ Genera las siguientes 4 adaptaciones específicas y prácticas para el docente:
       }));
 
       setIsGeneradorModalOpen(false);
-      showToast('Éxito', `Malla curricular para ${subjName} (Grado ${selectedGrade}°) generada automáticamente.`, 'success');
+      showToast('Éxito', `Malla curricular para ${subjName} (Grado ${selectedGrade}°) generada con éxito.`, 'success');
     } catch (e) {
-      const fallbackText = generateFallbackMalla(subjName, selectedGrade, mallaTab, instrucciones);
-      setMallaData(prev => ({
-        ...prev,
-        [key]: {
-          ...(prev[key] || {}),
-          [`p${mallaTab}`]: fallbackText
-        }
-      }));
-      setIsGeneradorModalOpen(false);
-      showToast('Éxito', `Malla curricular para ${subjName} (Grado ${selectedGrade}°) estructurada con éxito.`, 'success');
+      console.error("Fallo exacto en la IA:", e);
+      showToast('Error', 'Error de conexión con la IA, por favor intenta de nuevo', 'error');
+    } finally {
+      setIsGeneratingInclusiveAI(false);
     }
-    setIsGeneratingInclusiveAI(false);
   };
 
   const handleGenerarUnidadIA = async (documentoBase, instrucciones) => {
@@ -2816,55 +3103,87 @@ Genera las siguientes 4 adaptaciones específicas y prácticas para el docente:
     const key = `${subjName}_g${selectedGrade}`;
     const contextoAdicional = `Materia: ${subjName} | Grado: ${selectedGrade}°`;
 
+    const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || "";
+
+    if (!keyToUse) {
+      showToast('Error', 'Error de conexión con la IA, por favor intenta de nuevo', 'error');
+      setIsGeneratingInclusiveAI(false);
+      return;
+    }
+
     let userPrompt;
     let systemPrompt;
 
     if (!documentoBase && !instrucciones) {
       userPrompt = `Materia y Grado: ${contextoAdicional}. Genera una Unidad Didáctica completa y estándar para esta materia y grado, creando los temas y actividades desde cero de acuerdo a los recursos y estándares educativos generales.`;
-      systemPrompt = `Eres un coordinador académico experto. Tu misión es aligerar la carga del docente. Crea una Unidad Didáctica completa desde cero basándote en la materia y grado proporcionados. Responde ÚNICAMENTE con un JSON: { "titulo": "...", "objetivos": "...", "secuencia_didactica": "Inicio, Desarrollo, Cierre..." }. No incluyas markdown ni nada más, solo JSON válido.`;
+      systemPrompt = `Eres un coordinador académico experto. Tu misión es aligerar la carga del docente. Crea una Unidad Didáctica completa desde cero basándote en la materia y grado proporcionados.
+
+REGLA ESTRICTA PARA TÍTULOS: El título generado debe ser completo, académico y descriptivo. Tienes estrictamente prohibido limitarte a repetir la materia y el grado. DEBES incluir el tema central, habilidad o eje temático que se va a enseñar.
+Si el usuario pide una Unidad Didáctica, el campo del título debe seguir este formato exacto: Unidad Didáctica Pedagógica: [Materia] - Grado [X] | Tema: [Nombre del Tema Específico].
+
+REGLA INQUEBRANTABLE: Tienes ESTRICTAMENTE PROHIBIDO utilizar comillas dobles internas (") dentro de tus textos o párrafos explicativos, ya que rompen la estructura del JSON. Usa únicamente comillas simples (') si necesitas citar algo.
+Responde ÚNICAMENTE con un JSON: { "titulo": "Unidad Didáctica Pedagógica: [Materia] - Grado [X] | Tema: [Nombre del Tema Específico]", "objetivos": "...", "secuencia_didactica": "Inicio, Desarrollo, Cierre..." }. No incluyas markdown ni nada más, solo JSON válido.`;
     } else {
       userPrompt = `Material adjunto: ${documentoBase} | Instrucciones del profe: ${instrucciones} | Materia y Grado: ${contextoAdicional}`;
-      systemPrompt = `Eres un coordinador académico experto. Tu misión es aligerar la carga del docente. Si recibes material base, DEBES adaptarlo y mejorarlo según los recursos del profesor. Si es una Unidad Didáctica, responde ÚNICAMENTE con un JSON: { "titulo": "...", "objetivos": "...", "secuencia_didactica": "Inicio, Desarrollo, Cierre..." }. No incluyas markdown ni nada más, solo JSON válido.`;
+      systemPrompt = `Eres un coordinador académico experto. Tu misión es aligerar la carga del docente. Si recibes material base, DEBES adaptarlo y mejorarlo según los recursos del profesor.
+
+REGLA ESTRICTA PARA TÍTULOS: El título generado debe ser completo, académico y descriptivo. Tienes estrictamente prohibido limitarte a repetir la materia y el grado. DEBES incluir el tema central, habilidad o eje temático que se va a enseñar.
+Si el usuario pide una Unidad Didáctica, el campo del título debe seguir este formato exacto: Unidad Didáctica Pedagógica: [Materia] - Grado [X] | Tema: [Nombre del Tema Específico].
+
+REGLA INQUEBRANTABLE: Tienes ESTRICTAMENTE PROHIBIDO utilizar comillas dobles internas (") dentro de tus textos o párrafos explicativos, ya que rompen la estructura del JSON. Usa únicamente comillas simples (') si necesitas citar algo.
+Si es una Unidad Didáctica, responde ÚNICAMENTE con un JSON: { "titulo": "Unidad Didáctica Pedagógica: [Materia] - Grado [X] | Tema: [Nombre del Tema Específico]", "objetivos": "...", "secuencia_didactica": "Inicio, Desarrollo, Cierre..." }. No incluyas markdown ni nada más, solo JSON válido.`;
     }
 
-    const payload = {
-      contents: [{ parts: [{ text: userPrompt }] }],
-      systemInstruction: { parts: [{ text: systemPrompt }] }
-    };
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
     try {
-      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const result = await response.json();
-      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const cleanJsonStr = rawText.replace(/\`\`\`json/gi, '').replace(/\`\`\`/gi, '').trim();
+      const genAI = new GoogleGenerativeAI(keyToUse);
+      const candidateModels = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-1.5-flash"];
+      let result = null;
+      let lastError = null;
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout Gemini API')), 90000)
+      );
+
+      for (const modelName of candidateModels) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: systemPrompt,
+            generationConfig: { responseMimeType: "application/json" }
+          });
+          result = await Promise.race([
+            model.generateContent(userPrompt),
+            timeoutPromise
+          ]);
+          if (result) break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      if (!result) throw lastError || new Error('Error al conectar con la IA');
+
+      const rawText = result.response.text() || '';
+      const cleanJsonStr = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
       const parsedData = JSON.parse(cleanJsonStr);
 
       setUnidadesData(prev => ({
         ...prev,
         [key]: {
-          titulo: parsedData.titulo || `Unidad Didáctica de ${subjName} (Grado ${selectedGrade}°)`,
+          titulo: parsedData.titulo || `Unidad Didáctica Pedagógica: ${subjName} - Grado ${selectedGrade}° | Tema: Fundamentos de la Disciplina`,
           objetivo: parsedData.objetivos || 'Desarrollar competencias disciplinares fundamentales.',
           actividades: parsedData.secuencia_didactica || 'Secuencia didáctica por fases (Inicio, Desarrollo y Cierre).'
         }
       }));
 
       setIsGeneradorModalOpen(false);
-      showToast('Éxito', `Unidad didáctica para ${subjName} (${selectedGrade}°) generada automáticamente.`, 'success');
+      showToast('Éxito', `Unidad didáctica para ${subjName} (${selectedGrade}°) generada con éxito.`, 'success');
     } catch (e) {
-      const fallbackUnit = generateFallbackUnidad(subjName, selectedGrade, instrucciones);
-      setUnidadesData(prev => ({
-        ...prev,
-        [key]: {
-          titulo: fallbackUnit.titulo,
-          objetivo: fallbackUnit.objetivos,
-          actividades: fallbackUnit.actividades
-        }
-      }));
-      setIsGeneradorModalOpen(false);
-      showToast('Éxito', `Unidad didáctica estructurada para ${subjName} (${selectedGrade}°).`, 'success');
+      console.error("Fallo exacto en la IA:", e);
+      showToast('Error', 'Error de conexión con la IA, por favor intenta de nuevo', 'error');
+    } finally {
+      setIsGeneratingInclusiveAI(false);
     }
-    setIsGeneratingInclusiveAI(false);
   };
 
 
@@ -2902,31 +3221,31 @@ Genera las siguientes 4 adaptaciones específicas y prácticas para el docente:
     setAuthMethod(provider);
     setPendingFlowType(flowType);
     setFormData({ identifier: '', password: '', socialUser: '' });
-    setError('');
+    setAuthError('');
     setView('authForm');
   };
 
   const handleSendVerificationCode = () => {
-    setError('');
+    setAuthError('');
     const inputVal = (formData?.identifier || '').trim();
     
     if (!inputVal || inputVal.length < 2) {
-      setError(t.invalidEmailError);
+      setAuthError(t.invalidEmailError);
       return;
     }
 
     if (authMethod === 'google' && !inputVal.includes('@')) {
-      setError('Para Google, ingresa una cuenta de correo válida (ej: usuario@gmail.com)');
+      setAuthError('Para Google, ingresa una cuenta de correo válida (ej: usuario@gmail.com)');
       return;
     }
 
     if (authMethod === 'apple' && !inputVal.includes('@')) {
-      setError(t.appleErrorFormat);
+      setAuthError(t.appleErrorFormat);
       return;
     }
 
     if (!formData?.password || formData.password.length < 6) {
-      setError(t.invalidPasswordError);
+      setAuthError(t.invalidPasswordError);
       return;
     }
 
@@ -3326,9 +3645,15 @@ Código de verificación: ED-${Math.floor(100000 + Math.random() * 900000)}
     setChatMessages(prev => [...prev, { role: 'user', text: userText }]);
     setInputText('');
     setIsTyping(true);
-    const aiResponse = await fetchAIResponse(userText);
-    setChatMessages(prev => [...prev, { role: 'bot', text: aiResponse }]);
-    setIsTyping(false);
+    try {
+      const aiResponse = await fetchAIResponse(userText);
+      setChatMessages(prev => [...prev, { role: 'bot', text: aiResponse }]);
+    } catch (err) {
+      console.error('Error enviando mensaje chatbot:', err);
+      setChatMessages(prev => [...prev, { role: 'bot', text: `Error interno: ${err?.message || err}` }]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const generateFallbackAIChatResponse = (userQuery, forceLanguage = null) => {
@@ -3339,7 +3664,58 @@ Código de verificación: ED-${Math.floor(100000 + Math.random() * 900000)}
     const isEnglishQuery = /^(hello|hi|hey|good morning|good afternoon|how|what|can you|help|lesson|rubric|teacher|student|class|plan|grade)/i.test(queryLower);
     const isEn = activeLang === 'en' || isEnglishQuery;
 
-    // 1. Greetings
+    // 0. Emotional support / Stress / Burnout / Personal Burden (PRIORITY INTENT)
+    const isEmotional = /estrés|estres|cansad|agota|quema|burnout|jefe|director|rector|conflicto|problema personal|angustia|desánimo|desanimo|llorar|triste|presión|presion|carga mental|sobrecarga|stress|tired|exhausted|boss|conflict|overwhelm/i.test(queryLower);
+    if (isEmotional) {
+      if (isEn) {
+        return `### 💛 Hey colleague, I'm here for you!
+
+I completely understand how overwhelming and challenging teaching can feel at times. Please take a deep breath. You are doing a tremendous, valuable job every single day, but remember that **your wellbeing always comes first**.
+
+#### 🌿 3 Reminders from one teacher to another:
+1. **Set strict boundaries:** Leave administrative tasks at school as much as possible today.
+2. **Take micro-pauses:** Take 2 minutes between classes to breathe deeply and drink water.
+3. **Prioritize essentials:** Focus only on what is strictly necessary today.
+
+I am here to listen or help lighten your workload whenever you are ready. How are you feeling right now?`;
+      }
+      return `### 💛 ¡Hola, colega! Te escucho y estoy contigo
+
+Entiendo perfectamente lo agotadora y desafiante que puede llegar a ser nuestra labor en el aula. Por favor, tómate un momento para respirar profundo. Haces un trabajo valiosísimo todos los días, pero recuerda que **tu bienestar y salud mental van primero**. No tienes que resolverlo todo hoy ni cargar con todo tú solo.
+
+#### 🌿 3 Recordatorios de colega a colega:
+1. **Establece límites saludables:** Al terminar tu jornada, desconéctate de las tareas escolares.
+2. **Pausas activas de 2 minutos:** Entre clases, respira profundo, toma agua y estírate.
+3. **Prioriza lo esencial:** Simplifica las actividades de hoy y enfócate en lo imprescindible.
+
+Aquí estoy si necesitas desahogarte o si más adelante quieres que preparemos algo rápido para ahorrarte tiempo de planeación. ¿Cómo te sientes en este momento?`;
+    }
+
+    // 1. Technical / Errors / System Setup Questions
+    if (/error|fallo|no funciona|soluciona|arregla|problema|api key|configurar ia|clave/i.test(queryLower)) {
+      if (isEn) {
+        return `### ⚙️ EDUDOCENT AI Assistant — Operational Status
+
+All AI generators (Lesson Plans, Rubrics, UDL Inclusive Packages, Curriculum Meshes, Didactic Units) are **fully operational**!
+
+#### 🚀 How your AI generation works:
+1. **Integrated Smart Mode (Offline):** Generates structured lessons, UDL packages, and rubrics instantly without needing an external key.
+2. **Live Gemini Mode:** If you want live cloud responses, go to **Settings ⚙️**, paste your free Google Gemini API Key, and save.
+
+What class topic or grade level would you like to prepare now?`;
+      }
+      return `### ⚙️ Asistente EDUDOCENT — Estado Operativo
+
+¡Los generadores de IA (Planes de Clase, Rúbricas, Paquetes DUA Inclusivos, Mallas Curriculares y Unidades Didácticas) están **completamente operativos**!
+
+#### 🚀 Cómo funciona tu asistente:
+1. **Modo Inteligente Local (Offline):** Genera al instante secuencias didácticas, adaptaciones DUA y rúbricas contextualizadas sin costo ni necesidad de internet.
+2. **Modo Gemini en Vivo:** Si deseas respuestas personalizadas en la nube, ve a **Configuración ⚙️**, ingresa tu clave API gratuita de Google Gemini y haz clic en Guardar.
+
+¿Qué tema o asignatura de bachillerato te gustaría que preparemos juntos hoy?`;
+    }
+
+    // 2. Greetings
     if (/^(hola|hello|hi|hey|buenos dias|buenas tardes|good morning|good afternoon|saludos|que tal|how are you)/i.test(queryLower)) {
       if (isEn) {
         return `### 👋 Hello! Welcome to EDUDOCENT AI
@@ -3356,18 +3732,172 @@ I am your specialized teaching assistant. How can I help you today?
       }
       return `### 👋 ¡Hola! Bienvenido a EDUDOCENT IA
 
-Soy tu asistente pedagógico especializado. ¿En qué te puedo ayudar hoy?
+Soy tu copiloto pedagógico para docentes de bachillerato. ¿En qué te puedo colaborar hoy?
 
 #### 💡 Algunas áreas en las que te puedo apoyar:
 * 📋 **Planeación de Clases:** Diseñar secuencias didácticas, mallas curriculares y objetivos.
 * 📊 **Rúbricas y Evaluación:** Crear instrumentos de evaluación formativa y escalas de desempeño.
-* 🤝 **Gestión de Aula:** Estrategias de convivencia socioemocional y dinámicas participativas.
-* 🎬 **Recursos y Tecnología:** Integración de videos educativos, presentaciones y guías interactivas.
+* 🤝 **Gestión de Aula y DUA:** Estrategias inclusivas, manejo de convivencia y ritmos diversos.
+* 🎬 **Recursos y Dinámicas:** Integración de talleres prácticos, juegos y actividades lúdicas.
 
 *¿Sobre qué tema, asignatura o grado escolar deseas consultar hoy?*`;
     }
 
-    // 2. Videos / Multimedia
+    // 3. Mathematics & Exact Sciences
+    if (/matemática|matematica|álgebra|algebra|geometría|geometria|cálculo|calculo|fraccion|fracciones|ecuacion|ecuaciones|número|numero|pitágoras|pitagoras|función|funcion|math/i.test(queryLower)) {
+      if (isEn) {
+        return `### 📐 Mathematics Didactic Strategy & Lesson Plan
+**Focus Topic:** Mathematical Reasoning and Practical Application
+
+#### 🎯 1. Concrete to Abstract Pathway (CPA Approach):
+* **Concrete (Hands-on):** Start with real-world objects or relatable scenarios (e.g. budgeting, construction measurements, geometric patterns).
+* **Pictorial (Visual):** Use visual representations, coordinate grids, or area models on the board.
+* **Abstract (Formulas):** Introduce algebraic formulas only after students grasp the visual relationship.
+
+#### 📝 2. Active Classroom Exercise:
+* Divide the class into teams of 3 to solve a structured multi-step problem.
+* Ask each team to present alternative ways of solving the same problem.
+
+#### 💡 UDL Tip:
+Provide step-by-step formula reference cards and graph paper to support visual-spatial reasoning!`;
+      }
+      return `### 📐 Estrategia Didáctica para Matemáticas
+**Enfoque:** Razonamiento Lógico y Aplicación en el Contexto Real
+
+#### 🎯 1. Ruta Concreto-Pictórico-Abstracto (CPA):
+* **Fase Concreta / Contexto:** Inicia con un reto cotidiano (ej: presupuestos, cálculo de áreas en la cancha del colegio, escalas de mapas).
+* **Fase Pictórica / Visual:** Apóyate en esquemas gráficos, representaciones en el tablero o modelos visuales antes de la fórmula.
+* **Fase Abstracta:** Formaliza la expresión matemática una vez comprendida la relación conceptual.
+
+#### 📝 2. Dinámica de Trabajo en Aula:
+* Organiza retos en parejas con "problemas de múltiples vías de solución".
+* Fomenta que los estudiantes expliquen verbalmente el procedimiento antes de escribir la respuesta numérica.
+
+#### 💡 Apoyo Inclusivo DUA:
+Permite el uso de fichas de fórmulas visuales y papel cuadriculado para estudiantes con dificultades visoespaciales o discalculia.`;
+    }
+
+    // 4. Spanish / Language Arts / Reading Comprehension / Literature
+    if (/español|lengua|literatura|lectura|comprensión|comprension|redacción|redaccion|ortografía|ortografia|texto|poesía|poesia|cuento|ensayo|grammar|reading/i.test(queryLower)) {
+      if (isEn) {
+        return `### 📚 Language Arts & Reading Comprehension Guide
+**Focus Topic:** Critical Reading and Effective Written Expression
+
+#### 📖 1. Three-Level Reading Strategy:
+1. **Literal (What the text says):** Main ideas, characters, facts, and timeline.
+2. **Inferential (What the text implies):** Reading between the lines, identifying figurative language and author's purpose.
+3. **Critical (What you think):** Debating the author's stance and connecting with current society.
+
+#### ✍️ 2. Classroom Writing Workshop:
+* Use the **RAFT framework**: **R**ole (Writer's persona), **A**udience (Who reads), **F**ormat (Letter, essay, news article), **T**opic.
+
+#### 💡 UDL Tip:
+Provide graphic organizers and audio narration options to accommodate diverse reading speeds!`;
+      }
+      return `### 📚 Guía Didáctica de Lengua Castellana y Comprensión Lectora
+**Enfoque:** Lectura Crítica, Producción Textual y Argumentación
+
+#### 📖 1. Los Tres Niveles de Lectura en el Aula:
+1. **Nivel Literal:** Identificación de ideas principales, personajes y secuencia cronológica.
+2. **Nivel Inferencial:** Deducción del subtexto, causa-efecto y figuras literarias empleadas por el autor.
+3. **Nivel Crítico-Intertextual:** Debate reflexivo conectando el mensaje de la obra con situaciones actuales del entorno de los estudiantes.
+
+#### ✍️ 2. Taller de Escritura Significativa (Estrategia RAFT):
+* **R**ol del autor (periodista, testigo histórico, personaje de la historia).
+* **A**udiencia (a quién va dirigido el texto).
+* **F**ormato (crónica, carta de opinión, microcuento o guion de teatro).
+* **T**ema central trabajado en clase.
+
+#### 💡 Apoyo Inclusivo DUA:
+Utiliza textos en Lectura Fácil con glosarios visuales laterales y tamaño de fuente ampliado (14pt Arial).`;
+    }
+
+    // 5. Natural Sciences / Biology / Chemistry / Physics
+    if (/ciencia|biología|biologia|química|quimica|física|fisica|célula|celula|ecosistema|materia|energía|energia|laboratorio|átomo|atomo|science/i.test(queryLower)) {
+      if (isEn) {
+        return `### 🔬 Natural Sciences & Inquiry-Based Learning
+**Focus Topic:** Scientific Method and Hands-on Experimentation
+
+#### 🧪 1. 5E Instructional Model:
+* **Engage:** Start with a surprising natural phenomenon or demo.
+* **Explore:** Hands-on experiment or simulated data collection.
+* **Explain:** Students explain concepts using scientific vocabulary.
+* **Elaborate:** Apply findings to solve an environmental or everyday challenge.
+* **Evaluate:** Formative reflection and lab conclusion reports.
+
+#### 💡 UDL Tip:
+Use 3D interactive models (PhET simulations) and multi-sensory lab workstations!`;
+      }
+      return `### 🔬 Estrategia Pedagógica para Ciencias Naturales
+**Enfoque:** Aprendizaje Basado en Indagación y Experimentación Práctica
+
+#### 🧪 1. Modelo de las 5E para la Sesión:
+* **Enganchar (10 min):** Muestra un fenómeno natural curioso o una pregunta detonante de la vida real.
+* **Explorar (25 min):** Práctica de laboratorio sencilla o análisis de datos experimentales en equipos.
+* **Explicar (20 min):** Los estudiantes construyen la explicación con apoyo de conceptos clave en el tablero.
+* **Elaborar (20 min):** Aplican el concepto a un problema ambiental o tecnológico de su comunidad.
+* **Evaluar (15 min):** Ticket de salida con preguntas de transferencia conceptual.
+
+#### 💡 Apoyo Inclusivo DUA:
+Integra simuladores virtuales interactivos (como PhET) y tarjetas de conceptos con diagramas a color.`;
+    }
+
+    // 6. Social Studies / History / Geography / Philosophy / Ethics
+    if (/sociales|historia|geografía|geografia|filosofía|filosofia|ética|etica|democracia|constitución|constitucion|colombia|guerra|revolución|revolucion|derechos|history/i.test(queryLower)) {
+      if (isEn) {
+        return `### 🌍 Social Studies & Critical Thinking Framework
+**Focus Topic:** Historical Analysis, Civic Engagement, and Geography
+
+#### 🏛️ 1. Classroom Debate & Case Study Method:
+* Present a historical turning point as an open ethical dilemma.
+* Assign multi-perspective roles (e.g. government, civil society, impacted communities).
+* Foster evidence-based historical argumentation.
+
+#### 💡 UDL Tip:
+Provide interactive historical timelines and thematic maps with clear visual legends!`;
+      }
+      return `### 🌍 Estrategia para Ciencias Sociales e Historia
+**Enfoque:** Pensamiento Crítico, Conciencia Histórica y Ciudadanía
+
+#### 🏛️ 1. Metodología de Dilemas Históricos y Debates Guiados:
+* Presenta los acontecimientos no como fechas para memorizar, sino como decisiones complejas tomadas por actores sociales.
+* Organiza un juego de roles donde cada equipo defiende una perspectiva histórica con argumentos documentados.
+* Cierra con una reflexión sobre la vigencia de los derechos humanos y la convivencia democrática.
+
+#### 💡 Apoyo Inclusivo DUA:
+Utiliza líneas de tiempo visuales ilustradas con imágenes representativas y mapas conceptuales de causa-efecto.`;
+    }
+
+    // 7. Special Needs & UDL Inclusions (ADHD, Autism, Dyslexia, Down)
+    if (/tda|tdah|autism|autista|tea|dislexia|down|inclusi|adaptacion|adaptación|piar|dua|discapacidad/i.test(queryLower)) {
+      if (isEn) {
+        return `### 🧩 UDL & Inclusive Classroom Adaptation Plan
+**Target Support:** Individualized Learning Accommodations
+
+#### 📍 Practical Classroom Interventions:
+1. **Executive Function Support:** Visual timers, daily checklists, and chunked instructions (maximum 2 steps at a time).
+2. **Sensory Regulation:** Provide flexible seating, sensory quiet corners, and scheduled 2-minute movement breaks.
+3. **Assessment Diversification:** Allow oral answers, audio recordings, or visual organizers instead of long handwritten tests.
+
+You can also use our **Inclusive Support / DUA Generator** tab to create tailored packages instantly!`;
+      }
+      return `### 🧩 Plan de Adaptación e Inclusión DUA / PIAR
+**Enfoque:** Accesibilidad Universal y Apoyo a Necesidades Específicas
+
+#### 📍 Estrategias Prácticas para el Aula:
+1. **Estructuración y Funciones Ejecutivas:**
+   * Divide las tareas complejas en micropasos de 10 a 15 minutos con apoyos visuales y temporizador visible.
+   * Utiliza listas de verificación (*checklist*) para que el estudiante marque su propio avance.
+2. **Regulación Sensorial y del Comportamiento:**
+   * Facilita pausas activas o descansos sensoriales de 2 minutos antes de momentos de fatiga.
+   * Asigna un compañero tutor colaborativo para dinámicas grupales.
+3. **Flexibilidad en la Evaluación:**
+   * Permite que el estudiante demuestre lo aprendido mediante sustentación oral, maquetas, organizadores gráficos o audios.
+
+*Tip: Recuerda que en el módulo de **Apoyo Inclusivo DUA** puedes generar paquetes completos adaptados a cada condición con un solo clic.*`;
+    }
+
+    // 8. Videos / Multimedia
     if (queryLower.includes('video') || queryLower.includes('multimedia') || queryLower.includes('youtube') || queryLower.includes('crear') || queryLower.includes('media')) {
       if (isEn) {
         return `### 🎬 Pedagogical Guide for Integrating Educational Videos
@@ -3403,7 +3933,7 @@ Assign the video as pre-class prep and spend class time on collaborative group p
 * **Clase Invertida (Flipped Classroom):** Envía el video como material previo y aprovecha el tiempo de clase para proyectos grupales y resolución de dudas.`;
     }
 
-    // 3. Classroom Management / Behavior / Discipline
+    // 9. Classroom Management / Behavior / Discipline
     if (queryLower.includes('responde') || queryLower.includes('grosero') || queryLower.includes('feo') || queryLower.includes('disciplina') || queryLower.includes('comportamiento') || queryLower.includes('conducta') || queryLower.includes('niño') || queryLower.includes('estudiante') || queryLower.includes('behavior') || queryLower.includes('discipline') || queryLower.includes('student')) {
       if (isEn) {
         return `### 🤝 Socio-Emotional Classroom Management Strategy
@@ -3447,7 +3977,7 @@ Entiendo lo desafiante que puede ser enfrentar respuestas reactivas o irrespetuo
    * Si la conducta es recurrente, registra el seguimiento pedagógico e involucra a Psicorientación y a la familia con una ruta formativa.`;
     }
 
-    // 4. Lesson Planning / Mallas / Syllabi / Class Plans
+    // 10. Lesson Planning / Mallas / Syllabi / Class Plans
     if (queryLower.includes('plan') || queryLower.includes('clase') || queryLower.includes('lesson') || queryLower.includes('malla') || queryLower.includes('syllabus') || queryLower.includes('unidad') || queryLower.includes('unit')) {
       if (isEn) {
         return `### 📋 Lesson Planning & Curriculum Design Guide
@@ -3485,7 +4015,7 @@ Te propongo la siguiente estructura en 4 fases para diseñar sesiones de aprendi
 *¿Te gustaría que elaboremos un plan de clase completo para una asignatura o grado en particular?*`;
     }
 
-    // 5. Rubrics & Assessment
+    // 11. Rubrics & Assessment
     if (queryLower.includes('rubrica') || queryLower.includes('rubric') || queryLower.includes('evaluac') || queryLower.includes('assessment') || queryLower.includes('grade') || queryLower.includes('grading') || queryLower.includes('calific')) {
       if (isEn) {
         return `### 📊 Formative Evaluation & Rubric Design
@@ -3515,67 +4045,160 @@ A continuación te comparto una plantilla de rúbrica analítica por niveles de 
 ¡Comparte esta rúbrica con tus estudiantes antes de iniciar la actividad para potenciar la autoevaluación!`;
     }
 
-    // 6. Default response
+    // 12. Default response (Dynamic & Direct)
     if (isEn) {
-      return `### 💡 EDUDOCENT Pedagogical Guidance
+      return `### 💡 EDUDOCENT Teaching Assistant
+**Topic:** "${userQuery}"
 
-Thank you for your question: **"${userQuery}"**. Here is a recommended instructional pathway to address this in your classroom:
+Here is a practical 3-step recommendation for your class:
 
-1. **Diagnosis & Contextualization:** Identify students' prior knowledge and learning paces to adapt your strategy.
-2. **Active Methodology:** Incorporate collaborative dynamics, case studies, or challenge-based learning to boost motivation.
-3. **Continuous Formative Assessment:** Use exit tickets and timely feedback instead of relying solely on rote memorization exams.
+1. **Classroom Activation:** Introduce the concept with an engaging question connected to students' everyday lives.
+2. **Collaborative Practice:** Organize pairs to solve a challenge using hands-on resources.
+3. **Formative Assessment:** Use a 2-minute exit ticket to check understanding before concluding.
 
-*Would you like us to dive deeper into a specific teaching activity, lesson plan, or evaluation rubric for this topic?*`;
+*Would you like me to tailor a specific rubric, activity, or UDL accommodation for this?*`;
     }
 
     return `### 💡 Orientación Pedagógica EDUDOCENT
+**Consulta:** "${userQuery}"
 
-Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en tu aula de manera efectiva, te sugiero la siguiente ruta didáctica:
+¡Con gusto, colega! Aquí tienes una propuesta práctica para trabajar este tema con tus estudiantes:
 
-1. **Diagnóstico y Contextualización:** Identifica los ritmos de aprendizaje y conocimientos previos de tus estudiantes para adaptar la estrategia.
-2. **Metodología Activa:** Incorpora dinámicas colaborativas, estudio de casos o aprendizaje basado en retos para aumentar la motivación del grupo.
-3. **Evaluación Formativa Continuada:** Utiliza preguntas de verificación y retroalimentación oportuna en lugar de evaluaciones strictly memorísticas.
+1. **Activación Inicial:** Plantea una pregunta o reto visual cercano a la cotidianidad de los estudiantes para despertar su interés.
+2. **Desarrollo Guiado y Colaborativo:** Organiza actividades en parejas o pequeños grupos aplicando metodologías activas y apoyos visuales DUA.
+3. **Cierre y Evaluación Formativa:** Aplica un ticket de salida o pregunta reflexiva (*¿Qué aprendí hoy y cómo lo pongo en práctica?*).
 
-*¿Deseas que profundicemos en alguna actividad didáctica o rúbrica de evaluación específica para este tema?*`;
+*¿Deseas que profundicemos en la rúbrica de evaluación, el taller práctico o una adaptación inclusiva para esta sesión?*`;
   };
 
   const fetchAIResponse = async (userQuery, systemInstructions = "") => {
     const isEn = language === 'en';
     const langInstruction = isEn
       ? "CRITICAL RULE: You MUST answer strictly in English. Directly and accurately answer what the user asks."
-      : "REGLA CRÍTICA: Debes responder strictly en español. Responde de forma directa y precisa a lo que el usuario pregunta.";
+      : "REGLA CRÍTICA: Debes responder estrictamente en español. Responde de forma directa y precisa a lo que el usuario pregunta.";
 
-    const defaultSystem = isEn
-      ? `You are EDUDOCENT AI, an expert assistant in pedagogy, curriculum, and teaching methodology for primary and secondary school teachers. Your tone is professional, encouraging, and structured. ALWAYS format your responses using Markdown (use bolding, tables, bulleted lists, or code blocks if necessary). ${langInstruction}`
-      : `Eres EDUDOCENT IA, un asistente experto en pedagogía, currículo y didáctica para profesores de educación básica y media. Tu tono es profesional, alentador y estructurado. Formatea SIEMPRE tus respuestas usando Markdown para que sean visualmente ricas (usa negritas, tablas, listas con viñetas o bloques de código si es necesario). ${langInstruction}`;
+    const independentChatbotPrompt = isEn
+      ? `You are an empathetic teacher colleague. Your task is to validate the teacher's emotions, provide moral support advice, and conflict resolution strategies in plain conversational text format. NEVER generate JSON, tables, or code. ${langInstruction}`
+      : `Eres un colega docente empático. Tu tarea es validar las emociones del profesor, dar consejos de apoyo moral y estrategias de resolución de conflictos en formato de texto conversacional plano. NUNCA generes JSON, tablas ni código. ${langInstruction}`;
 
-    const systemPrompt = systemInstructions ? `${systemInstructions}\n${langInstruction}` : defaultSystem;
+    const systemPrompt = systemInstructions ? `${systemInstructions}\n${langInstruction}` : independentChatbotPrompt;
 
-    const payload = {
-      contents: [{ parts: [{ text: userQuery }] }],
-      systemInstruction: { parts: [{ text: systemPrompt }] }
-    };
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || "";
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      const textResult = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (textResult && textResult.trim().length > 10) {
-        return textResult;
-      }
-      return generateFallbackAIChatResponse(userQuery, language);
-    } catch (error) {
-      return generateFallbackAIChatResponse(userQuery, language);
+    if (!keyToUse) {
+      throw new Error('No se encontró una clave API de Gemini configurada.');
     }
+
+    const genAI = new GoogleGenerativeAI(keyToUse);
+    const candidateModels = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-1.5-flash"];
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout de conexión con la API de Gemini (90s)')), 90000)
+    );
+
+    // Relajación de Filtros (Safety Settings) a BLOCK_NONE para evitar bloqueos por palabras como estrés o crisis
+    const safetySettings = [
+      {
+        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+    ];
+
+    // Construir historial multi-turno con alternancia estricta y aislamiento del saludo inicial
+    const buildStrictGeminiHistory = (messages) => {
+      const history = [];
+      let expectedRole = 'user'; // Gemini exige iniciar estrictamente con 'user'
+
+      const validMessages = (messages || []).filter(
+        msg => (msg.role === 'user' || msg.role === 'bot') &&
+               msg.text &&
+               !msg.text.startsWith('Error interno:') &&
+               !msg.text.startsWith('⚠️')
+      );
+
+      // Encontrar el primer mensaje del usuario (ignorando saludos puramente visuales de la UI)
+      const firstUserIdx = validMessages.findIndex(m => m.role === 'user');
+      if (firstUserIdx === -1) {
+        return [];
+      }
+
+      for (let i = firstUserIdx; i < validMessages.length; i++) {
+        const msg = validMessages[i];
+        const roleForGemini = msg.role === 'user' ? 'user' : 'model';
+
+        if (roleForGemini === expectedRole) {
+          history.push({
+            role: roleForGemini,
+            parts: [{ text: msg.text }]
+          });
+          expectedRole = expectedRole === 'user' ? 'model' : 'user';
+        }
+      }
+
+      // El historial previo para startChat debe terminar en 'model' para que sendMessage(userQuery) envíe el nuevo 'user'
+      while (history.length > 0 && history[history.length - 1].role === 'user') {
+        history.pop();
+      }
+
+      return history;
+    };
+
+    const formattedHistory = buildStrictGeminiHistory(chatMessages);
+
+    let lastError = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemPrompt,
+          safetySettings: safetySettings
+          // NOTA: TIENE ESTRICTAMENTE PROHIBIDO usar responseMimeType: "application/json"
+        });
+
+        if (systemInstructions) {
+          const result = await Promise.race([
+            model.generateContent(userQuery),
+            timeoutPromise
+          ]);
+          const textResult = result?.response?.text();
+          if (textResult && textResult.trim().length > 0) return textResult;
+        } else {
+          const chatSession = model.startChat({
+            history: formattedHistory.slice(-10),
+            safetySettings: safetySettings
+          });
+          const result = await Promise.race([
+            chatSession.sendMessage(userQuery),
+            timeoutPromise
+          ]);
+          const textResult = result?.response?.text();
+          if (textResult && textResult.trim().length > 0) return textResult;
+        }
+      } catch (err) {
+        lastError = err;
+        console.warn(`Reintento de chat con ${modelName} tras error:`, err?.message || err);
+      }
+    }
+
+    throw lastError || new Error('No se pudo obtener respuesta del modelo de IA');
   };
 
   const clearChat = () => {
     setChatMessages(initialChat);
+    chatSessionRef.current = null;
     showToast("Conversación reiniciada", "success");
   };
 
@@ -3611,6 +4234,10 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
     : isAuthenticatedView
       ? 'md:min-h-[90vh] md:max-w-6xl lg:max-w-7xl md:my-6 md:rounded-[2.5rem] shadow-2xl border border-slate-100 md:border-slate-200/60'
       : 'md:min-h-[92vh] md:max-w-md md:my-8 md:rounded-[3rem] shadow-2xl border border-slate-100 md:border-slate-200/60';
+
+  console.log('Datos listos para renderizar:', datosPaquete);
+
+  if (error) return <div className="p-5 bg-red-100 text-red-700 font-bold rounded-lg border border-red-500">Error Crítico: {String(error)}</div>;
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark' : ''} ${containerClasses} bg-[var(--bg-app)] text-[var(--text-main)] font-sans w-full mx-auto relative overflow-hidden flex flex-col ${isAuthenticatedView ? 'md:flex-row' : ''} animate-pageIn`}>
@@ -4610,9 +5237,9 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
                 </div>
               </div>
 
-              {error && (
+              {authError && (
                 <div className="bg-red-50 text-red-600 p-3.5 rounded-2xl text-xs font-bold flex items-center gap-2 border border-red-100">
-                  <AlertCircle size={16} /> {error}
+                  <AlertCircle size={16} /> {authError}
                 </div>
               )}
 
@@ -5267,6 +5894,89 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
 
             {/* Columna 2 */}
             <div className="space-y-6">
+              {/* CONFIGURACIÓN DE INTELIGENCIA ARTIFICIAL (GEMINI) */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                <div className="flex items-center gap-3 mb-2 border-b border-slate-50 pb-3">
+                  <BrainCircuit className="text-indigo-600" size={20} />
+                  <div>
+                    <h3 className="font-black text-sm text-slate-800">Inteligencia Artificial (Gemini)</h3>
+                    <p className="text-[10px] text-slate-400 font-semibold">Configura tu clave de API de Google Gemini para generación en vivo</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${apiKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}></span>
+                      {apiKey ? 'API Key Conectada' : 'Modo Asistente Local Activo'}
+                    </span>
+                    <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${apiKey ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {apiKey ? 'Gemini 1.5 Flash' : 'Respaldo Inteligente'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block ml-1">Clave de API de Gemini:</label>
+                    <div className="relative">
+                      <Sparkles className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input
+                        type={showApiKey ? "text" : "password"}
+                        value={apiKeyInput}
+                        onChange={(e) => setApiKeyInput(e.target.value)}
+                        placeholder="Pega aquí tu clave: AIzaSy..."
+                        className="w-full bg-slate-50 border border-slate-200 pl-10 pr-10 py-3 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showApiKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = apiKeyInput.trim();
+                        if (trimmed) {
+                          localStorage.setItem('edudocent_gemini_api_key', trimmed);
+                          setCustomApiKey(trimmed);
+                          showToast('🎉 ¡Clave de Gemini API guardada con éxito!', 'success');
+                        } else {
+                          localStorage.removeItem('edudocent_gemini_api_key');
+                          setCustomApiKey('');
+                          showToast('Clave removida. Usando modo inteligente local.', 'info');
+                        }
+                      }}
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-2xl font-black text-xs uppercase tracking-wider shadow-md shadow-indigo-100 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Save size={15} /> Guardar Clave
+                    </button>
+                    {apiKey && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setApiKeyInput('');
+                          setCustomApiKey('');
+                          localStorage.removeItem('edudocent_gemini_api_key');
+                          showToast('Clave de API restablecida', 'info');
+                        }}
+                        className="px-3.5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+                        title="Borrar clave guardada"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
+                    💡 Si no tienes una clave de API, todas las funciones de EDUDOCENT siguen funcionando a la perfección gracias al motor de generación pedagógica local integrado.
+                  </p>
+                </div>
+              </div>
+
               {/* TEMAS */}
               <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
                 <div className="flex items-center gap-3 mb-2 border-b border-slate-50 pb-3">
@@ -5409,29 +6119,12 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
                 </button>
               </div>
 
-              {/* PESTAÑAS DE NAVEGACIÓN SUPERIOR */}
-              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pt-2 pb-1">
-                <button
-                  onClick={() => setInclusiveSubTab('dua')}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all cursor-pointer ${inclusiveSubTab === 'dua'
-                      ? 'bg-indigo-600 text-white shadow-md scale-105'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                >
-                  <Sparkles size={16} />
-                  <span>{t.tabDuaAdaptor || "Adaptador DUA"}</span>
-                </button>
-
-                <button
-                  onClick={() => setInclusiveSubTab('bank')}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all cursor-pointer ${inclusiveSubTab === 'bank'
-                      ? 'bg-indigo-600 text-white shadow-md scale-105'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                >
-                  <BookOpen size={16} />
-                  <span>{t.tabSpecialResources || "Banco de Recursos Especiales"}</span>
-                </button>
+              {/* Subtítulo DUA (vista única permanente) */}
+              <div className="flex items-center gap-2 pt-2 pb-1">
+                <span className="flex items-center gap-1.5 text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
+                  <Sparkles size={13} />
+                  {t.tabDuaAdaptor || "Adaptador DUA con Inteligencia Artificial"}
+                </span>
               </div>
             </header>
 
@@ -5441,7 +6134,7 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
               {/* ==================================================== */}
               {/* SUB-PESTAÑA 1: ADAPTADOR DUA & GENERADOR IA CONECTADO A MATERIAS */}
               {/* ==================================================== */}
-              {inclusiveSubTab === 'dua' && (
+              {(
                 <div className="space-y-6 animate-fadeIn">
 
                   {/* SELECTOR DE MATERIAS DEL DOCENTE */}
@@ -5700,14 +6393,15 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
 
                             {/* Botón de Generación */}
                             <button
-                              onClick={handleGenerateDuaAI}
-                              disabled={!duaTopic.trim() || isGeneratingDua}
-                              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black py-4 px-6 rounded-2xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs uppercase tracking-wider cursor-pointer border-0 active:scale-95"
+                              type="button"
+                              onClick={generarPaqueteDUA}
+                              disabled={isGeneratingDua}
+                              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black py-4 px-6 rounded-2xl transition-all shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs uppercase tracking-wider cursor-pointer border-0 active:scale-95"
                             >
                               {isGeneratingDua ? (
                                 <>
                                   <Loader2 className="animate-spin" size={18} />
-                                  <span>{t.generatingPackageText || "Cruzando datos DUA y generando paquete con IA..."}</span>
+                                  <span>{language === 'en' ? 'Thinking adaptations...' : 'Pensando adaptaciones...'}</span>
                                 </>
                               ) : (
                                 <>
@@ -5718,94 +6412,99 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
                             </button>
                           </div>
 
-                          {/* RESULTADOS GENERADOS POR IA */}
-                          {duaGeneratedResult && (
-                            <div className="space-y-5 animate-pageIn">
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                                  <CheckCircle2 className="text-emerald-500" size={20} />
-                                  <span>{t.adaptedMaterialReady || "Material Adaptado Listo para Usar"}</span>
-                                </h3>
+                          {/* MENSAJE DE ERROR O RESPUESTA CRUDA DE RESPALDO */}
+                          {duaRawError && (
+                            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-4 rounded-2xl text-amber-800 dark:text-amber-200 text-xs space-y-2 animate-fadeIn">
+                              <div className="flex items-center justify-between font-bold flex-wrap gap-2">
+                                <span>⚠️ Hubo un detalle al estructurar automáticamente las tarjetas, aquí está el texto generado:</span>
+                                <button
+                                  type="button"
+                                  onClick={generarPaqueteDUA}
+                                  className="bg-amber-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-amber-700 transition-all cursor-pointer border-0"
+                                >
+                                  Reintentar
+                                </button>
+                              </div>
+                              <div className="whitespace-pre-wrap font-sans text-xs max-h-48 overflow-y-auto bg-white/60 dark:bg-black/30 p-3 rounded-xl border border-amber-100 dark:border-amber-900/50">
+                                {typeof duaRawError === 'string' ? duaRawError : JSON.stringify(duaRawError, null, 2)}
+                              </div>
+                            </div>
+                          )}
 
-                                <div className="flex items-center gap-2">
+                          {/* RESULTADOS DEFINITIVOS: PAQUETE DUA (Mapeo Dinámico Seguro) */}
+                          {datosPaquete && typeof datosPaquete === 'object' && !Array.isArray(datosPaquete) && (
+                            <div className="space-y-6 animate-pageIn">
+                              {/* Barra de cabecera con acciones */}
+                              <div className="flex items-center justify-between flex-wrap gap-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-slate-800 dark:to-slate-800/80 p-4 sm:p-5 rounded-3xl border border-indigo-100 dark:border-slate-700 shadow-sm">
+                                <div className="space-y-0.5">
+                                  <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                                    <CheckCircle2 className="text-emerald-500 shrink-0" size={20} />
+                                    <span>{language === 'en' ? '6-Resource UDL Package Ready' : 'Paquete DUA de 6 Recursos Listo'}</span>
+                                  </h3>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                    {language === 'en' ? 'Full inclusive package adapted to your classroom needs' : 'Herramientas de aula adaptadas a las condiciones seleccionadas'}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <button
-                                    onClick={() => exportDuaPackageToWord(duaGeneratedResult, duaTopic, currentActiveSubject, duaSelectedConditions)}
+                                    type="button"
+                                    onClick={() => exportDuaPackageToWord(datosPaquete, duaTopic, currentActiveSubject, duaSelectedConditions)}
                                     className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer border-0"
+                                    title={language === 'en' ? 'Export all resources to Word (.docx)' : 'Exportar recursos a Word (.docx)'}
                                   >
-                                    <FileText size={14} /> {t.exportWord || "Exportar Word (.doc)"}
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      toggleInclusivePlanItem({
-                                        id: `dua-pkg-${Date.now()}`,
-                                        title: `${language === 'en' ? 'UDL Package:' : 'Paquete DUA:'} ${t?.subjects?.[currentActiveSubject.name] || currentActiveSubject.name} - ${duaTopic.slice(0, 25)}...`,
-                                        category: language === 'en' ? 'AI UDL Package' : 'Paquete DUA IA',
-                                        desc: `${language === 'en' ? 'Adapted for:' : 'Adaptado para:'} ${activeConditionsData.map(c => c.title).join(', ')}`,
-                                        detail: `Quiz: ${duaGeneratedResult.quiz}\n\n${language === 'en' ? 'Game:' : 'Juego:'} ${duaGeneratedResult.game}\n\n${language === 'en' ? 'Slides:' : 'Diapositivas:'} ${duaGeneratedResult.presentation}`,
-                                        icon: '🧠'
-                                      });
-                                    }}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer border-0"
-                                  >
-                                    <Plus size={14} /> {t.saveToMyPlan || "Guardar en Mi Plan"}
+                                    <FileText size={14} /> {t.exportWord || "Exportar Word"}
                                   </button>
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-1 gap-4">
-                                {/* 1: Quiz */}
-                                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex gap-4 items-start">
-                                  <div className="bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-300 p-3 rounded-2xl shrink-0 text-xl">
-                                    📝
-                                  </div>
-                                  <div className="space-y-1.5 flex-1">
-                                    <h4 className="font-black text-slate-900 dark:text-white text-sm">{t.quizTitle || "1. Quiz Adaptado (Lectura Fácil)"}</h4>
-                                    <p className="text-slate-600 dark:text-slate-300 text-xs whitespace-pre-line leading-relaxed font-medium">
-                                      {duaGeneratedResult.quiz}
-                                    </p>
-                                  </div>
+                              {/* Mapeo Dinámico Nativo 100% Seguro */}
+                              {/* Tips DUA: Renderizado especial para el array */}
+                              {datosPaquete?.tips_dua && Array.isArray(datosPaquete.tips_dua) && datosPaquete.tips_dua.length > 0 && (
+                                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 shadow-sm">
+                                  <h4 className="font-black text-indigo-700 dark:text-indigo-300 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <Sparkles size={15} className="text-purple-500" />
+                                    {language === 'en' ? 'Practical DUA Tips for the Classroom' : 'Tips DUA Prácticos para el Aula'}
+                                  </h4>
+                                  <ul className="space-y-2">
+                                    {datosPaquete.tips_dua.map((tip, idx) => (
+                                      <li key={idx} className="flex items-start gap-2.5 bg-white/70 dark:bg-slate-800/70 p-3 rounded-xl border border-indigo-50 dark:border-slate-700/60">
+                                        <span className="w-6 h-6 bg-indigo-600 text-white text-[10px] font-black rounded-full flex items-center justify-center shrink-0 mt-0.5">{idx + 1}</span>
+                                        <span className="text-sm text-slate-700 dark:text-slate-200 font-medium leading-relaxed">{typeof tip === 'string' ? tip : String(tip)}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
                                 </div>
+                              )}
 
-                                {/* 2: Juego */}
-                                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex gap-4 items-start">
-                                  <div className="bg-orange-100 text-orange-600 dark:bg-orange-950 dark:text-orange-300 p-3 rounded-2xl shrink-0 text-xl">
-                                    🎮
-                                  </div>
-                                  <div className="space-y-1.5 flex-1">
-                                    <h4 className="font-black text-slate-900 dark:text-white text-sm">{t.gameTitle || "2. Recomendación de Juego Web / Dinámica Interactiva"}</h4>
-                                    <p className="text-slate-600 dark:text-slate-300 text-xs whitespace-pre-line leading-relaxed font-medium">
-                                      {duaGeneratedResult.game}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* 3: Diapositivas */}
-                                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex gap-4 items-start">
-                                  <div className="bg-purple-100 text-purple-600 dark:bg-purple-950 dark:text-purple-300 p-3 rounded-2xl shrink-0 text-xl">
-                                    🖥️
-                                  </div>
-                                  <div className="space-y-1.5 flex-1">
-                                    <h4 className="font-black text-slate-900 dark:text-white text-sm">{t.presentationTitle || "3. Estructura para Diapositivas y Secuencia Visual"}</h4>
-                                    <p className="text-slate-600 dark:text-slate-300 text-xs whitespace-pre-line leading-relaxed font-medium">
-                                      {duaGeneratedResult.presentation}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* 4: Evaluación */}
-                                {duaGeneratedResult.evaluation && (
-                                  <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex gap-4 items-start">
-                                    <div className="bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300 p-3 rounded-2xl shrink-0 text-xl">
-                                      📊
+                              {/* Tarjetas para los 6 recursos (excluye tips_dua que tiene su propio render) */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {Object.entries(datosPaquete)
+                                  .filter(([key]) => key !== 'tips_dua')
+                                  .map(([key, value]) => (
+                                  <div key={key} className="p-4 sm:p-5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700/60 pb-2 mb-2">
+                                      <h4 className="font-bold text-indigo-600 dark:text-indigo-400 uppercase text-xs sm:text-sm">
+                                        {key.replace(/_/g, ' ')}
+                                      </h4>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const textVal = value ? (typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)) : '';
+                                          navigator?.clipboard?.writeText(textVal);
+                                          showToast('¡Copiado al portapapeles!', 'success');
+                                        }}
+                                        className="text-[11px] font-bold text-slate-500 hover:text-indigo-600 bg-slate-50 dark:bg-slate-700 px-2 py-1 rounded-lg transition-all cursor-pointer border-0"
+                                        title="Copiar texto"
+                                      >
+                                        📋 Copiar
+                                      </button>
                                     </div>
-                                    <div className="space-y-1.5 flex-1">
-                                      <h4 className="font-black text-slate-900 dark:text-white text-sm">{t.evaluationTitle || "4. Evaluación Flexible y Formativa"}</h4>
-                                      <p className="text-slate-600 dark:text-slate-300 text-xs whitespace-pre-line leading-relaxed font-medium">
-                                        {duaGeneratedResult.evaluation}
-                                      </p>
-                                    </div>
+                                    <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200 text-sm leading-relaxed">
+                                      {value ? (typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)) : 'Dato no generado'}
+                                    </p>
                                   </div>
-                                )}
+                                ))}
                               </div>
                             </div>
                           )}
@@ -5816,10 +6515,8 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
                 </div>
               )}
 
-              {/* ==================================================== */}
-              {/* SUB-PESTAÑA 2: BANCO DE RECURSOS ESPECIALES */}
-              {/* ==================================================== */}
-              {inclusiveSubTab === 'bank' && (
+              {/* Banco de Recursos eliminado - Vista única: Adaptador DUA */}
+              {false && (
                 <div className="space-y-6 animate-fadeIn">
                   {/* Barra de búsqueda y Filtros */}
                   <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
@@ -5994,30 +6691,44 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
                     </div>
 
                     {/* IA Result Section */}
-                    {inclusiveAIResult && (
+                    {guiaTipResult && (
                       <div className="bg-violet-50 dark:bg-violet-950/40 p-4 rounded-2xl border border-violet-200 dark:border-violet-800/40 animate-pageIn space-y-2">
                         <div className="flex items-center gap-1.5 text-violet-700 dark:text-violet-300 font-black text-xs">
                           <Sparkles size={14} /> {t.aiPracticalGuideTitle || "Guía Práctica Generada por IA:"}
                         </div>
-                        <div className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-line font-medium">
-                          {typeof inclusiveAIResult === 'string' ? inclusiveAIResult : JSON.stringify(inclusiveAIResult, null, 2)}
-                        </div>
+                        <div
+                          className="overflow-y-auto max-h-48 text-xs text-slate-700 dark:text-slate-200 leading-relaxed font-medium whitespace-pre-wrap pr-1 custom-scrollbar"
+                          dangerouslySetInnerHTML={{
+                            __html: sanitizeHTML(formatMarkdownToHTML(typeof guiaTipResult === 'string' ? guiaTipResult : JSON.stringify(guiaTipResult, null, 2)))
+                          }}
+                        />
                       </div>
                     )}
 
                     {/* Acciones de IA y Descarga */}
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <button
-                        onClick={() => handleGenerateInclusiveAI(selectedInclusiveResource)}
-                        disabled={isGeneratingInclusiveAI}
-                        className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer border-0 active:scale-95 transition-all"
+                        type="button"
+                        onClick={() => generarGuiaTip(selectedInclusiveResource)}
+                        disabled={isGeneratingTip}
+                        className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer border-0 active:scale-95 transition-all"
                       >
-                        {isGeneratingInclusiveAI ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                        {t.generateAiGuideBtn || "Generar Guía IA"}
+                        {isGeneratingTip ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Generando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={14} />
+                            <span>{t.generateAiGuideBtn || "Generar Guía IA"}</span>
+                          </>
+                        )}
                       </button>
 
                       <button
-                        onClick={() => exportInclusivePlanToWord([selectedInclusiveResource], showToast)}
+                        type="button"
+                        onClick={() => exportTipGuideToWord(selectedInclusiveResource, guiaTipResult)}
                         className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer border-0 active:scale-95 transition-all"
                       >
                         <FileText size={14} /> {t.downloadWordShort || "Descargar Word"}
@@ -6255,10 +6966,10 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
 
               return (
                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex-1 flex flex-col space-y-3" key={`${key}-p${mallaTab}`}>
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <span className="text-xs font-black text-slate-800 flex items-center gap-2">
-                      <span className="text-base">{currentSubj.icon}</span>
-                      <span>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2 flex-wrap gap-2">
+                    <span className="text-xs font-black text-slate-800 flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="text-base shrink-0">{currentSubj.icon}</span>
+                      <span className="break-words">
                         {language === 'en'
                           ? `Curriculum Grid: ${t?.subjects?.[currentSubjName] || currentSubjName} — Grade ${selectedGrade} (Term ${mallaTab})`
                           : `Malla Curricular: ${currentSubjName} — Grado ${selectedGrade}° (Periodo ${mallaTab})`}
@@ -6710,7 +7421,7 @@ Gracias por tu consulta: **"${userQuery}"**. Para abordar este tema formativo en
                     <p>{msg.text}</p>
                   ) : (
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {i === 0 ? t.chatInitialMessage : msg.text}
+                      {msg.text}
                     </ReactMarkdown>
                   )}
                 </div>
