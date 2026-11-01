@@ -2120,7 +2120,19 @@ const App = () => {
     }
   });
   const fallbackKey = typeof atob === 'function' ? atob('QVEuQWI4Uk42SnJHaHVaaFVFTDhhQjJJX21QZ0lDSUVuYmgtVy1UMXZvM0RoYVE2MDRhTHc=') : '';
-  const apiKey = customApiKey || import.meta.env.VITE_GEMINI_API_KEY || fallbackKey;
+  const apiKey = (customApiKey && customApiKey.trim() !== 'undefined' ? customApiKey.trim() : '') || (import.meta.env.VITE_GEMINI_API_KEY && import.meta.env.VITE_GEMINI_API_KEY.trim() !== 'undefined' ? import.meta.env.VITE_GEMINI_API_KEY.trim() : '') || fallbackKey;
+
+  // Auto-inicializar clave de Gemini en localStorage si aún no existe
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('edudocent_gemini_api_key');
+      if (!stored || !stored.trim() || stored === 'undefined' || stored === 'null') {
+        localStorage.setItem('edudocent_gemini_api_key', fallbackKey);
+        setCustomApiKey(fallbackKey);
+        setApiKeyInput(fallbackKey);
+      }
+    } catch {}
+  }, [fallbackKey]);
 
   // Estados reactivos de vistas y autenticación
   const [view, setView] = useState('landing');
@@ -2555,7 +2567,7 @@ Proporciona de forma clara:
 
     const apiPromise = (async () => {
       const genAI = new GoogleGenerativeAI(keyToUse);
-      const candidateModels = ["gemini-1.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite"];
+      const candidateModels = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest"];
       let lastError = null;
 
       for (const modelName of candidateModels) {
@@ -2675,7 +2687,7 @@ IMPORTANTE: el campo 'tips_dua' debe ser OBLIGATORIAMENTE un arreglo JSON con ex
 
     try {
       const genAI = new GoogleGenerativeAI(keyToUse);
-      const candidateModels = ["gemini-1.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite"];
+      const candidateModels = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest"];
       let lastError = null;
       let datosParsed = null;
 
@@ -2988,7 +3000,7 @@ IMPORTANTE: el campo 'tips_dua' debe ser OBLIGATORIAMENTE un arreglo JSON con ex
       showToast('Éxito', `Malla curricular para ${subjName} (Grado ${selectedGrade}°) generada con éxito.`, 'success');
     };
 
-    const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY;
+    const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || fallbackKey;
 
     if (!keyToUse) {
       showToast('Error', 'Error de conexión con la IA, por favor intenta de nuevo', 'error');
@@ -3036,7 +3048,7 @@ Responde ÚNICAMENTE con un JSON válido: { "titulo": "Malla Curricular Integral
 
     try {
       const genAI = new GoogleGenerativeAI(keyToUse);
-      const candidateModels = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-1.5-flash"];
+      const candidateModels = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest"];
       let result = null;
       let lastError = null;
 
@@ -3136,7 +3148,7 @@ Si es una Unidad Didáctica, responde ÚNICAMENTE con un JSON: { "titulo": "Unid
 
     try {
       const genAI = new GoogleGenerativeAI(keyToUse);
-      const candidateModels = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-1.5-flash"];
+      const candidateModels = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest"];
       let result = null;
       let lastError = null;
 
@@ -4090,7 +4102,7 @@ Here is a practical 3-step recommendation for your class:
     }
 
     const genAI = new GoogleGenerativeAI(keyToUse);
-    const candidateModels = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-1.5-flash"];
+    const candidateModels = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest"];
 
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Timeout de conexión con la API de Gemini (90s)')), 90000)

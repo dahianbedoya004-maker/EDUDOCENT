@@ -1551,7 +1551,14 @@ export const exportToWord = async (titulo, resultado, showToast, extraContext = 
 // ==========================================
 export const callGeminiAPI = async (userPrompt, systemPrompt, apiKey, timeoutMs = 90000) => {
   const fallbackKey = typeof atob === 'function' ? atob('QVEuQWI4Uk42SnJHaHVaaFVFTDhhQjJJX21QZ0lDSUVuYmgtVy1UMXZvM0RoYVE2MDRhTHc=') : '';
-  const keyToUse = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('edudocent_gemini_api_key') : '') || import.meta.env.VITE_GEMINI_API_KEY || fallbackKey;
+  let storedKey = '';
+  try {
+    storedKey = (localStorage.getItem('edudocent_gemini_api_key') || '').trim();
+    if (storedKey === 'undefined' || storedKey === 'null') storedKey = '';
+  } catch {}
+  const cleanApiKey = (apiKey && typeof apiKey === 'string' && apiKey.trim() !== 'undefined' && apiKey.trim() !== 'null') ? apiKey.trim() : '';
+  const envKey = (import.meta.env.VITE_GEMINI_API_KEY && import.meta.env.VITE_GEMINI_API_KEY.trim() !== 'undefined') ? import.meta.env.VITE_GEMINI_API_KEY.trim() : '';
+  const keyToUse = cleanApiKey || storedKey || envKey || fallbackKey;
 
   if (!keyToUse) {
     throw new Error('No se detectó la clave de Gemini API. Por favor ingrésala en ⚙️ SETTINGS (abajo en el menú) o configúrala en las variables de Netlify (VITE_GEMINI_API_KEY).');
@@ -1565,7 +1572,7 @@ export const callGeminiAPI = async (userPrompt, systemPrompt, apiKey, timeoutMs 
 
   const apiPromise = (async () => {
     const genAI = new GoogleGenerativeAI(keyToUse);
-    const candidateModels = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-1.5-flash"];
+    const candidateModels = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest"];
     let lastError = null;
 
     for (const modelName of candidateModels) {
